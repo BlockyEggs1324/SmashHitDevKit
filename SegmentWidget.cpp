@@ -88,7 +88,7 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
     QVector3D up(0.0f, 1.0f, 0.0f);
 
     if (m_gameView) {
-        view.lookAt(m_cameraPosition, m_cameraPosition + QVector3D(0, 0, -1), up);
+        view.lookAt(QVector3D(0, -1, m_gameViewPosition), QVector3D(0, -1, m_gameViewPosition) + QVector3D(0, 0, -1), up);
     } else {
         view.lookAt(m_cameraPosition, cameraTarget, up);
     }
@@ -164,7 +164,7 @@ void SegmentWidget::paintGL() {
 
         QMatrix4x4 model;
 
-        if (m_gameView) model.translate(0, -1.0f, m_gameViewPosition);
+        if (m_gameView) model.translate(0, -1, m_gameViewPosition);
         else model.translate(-m_cameraPosition.x(), -m_cameraPosition.y(), -m_cameraPosition.z());
 
         //model.rotate(m_cameraYaw)

@@ -2,7 +2,7 @@ QT       += core gui 3dcore 3drender 3dinput 3dextras openglwidgets opengl xml
 
 LIBS += -lopengl32 -lglu32
 
-INCLUDEPATH += "C:\Users\samue\Downloads\glm-1.0.1-light"
+INCLUDEPATH += "C:\GLM\glm-1.0.1-light" # Change this to your GLM directory if needed
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
