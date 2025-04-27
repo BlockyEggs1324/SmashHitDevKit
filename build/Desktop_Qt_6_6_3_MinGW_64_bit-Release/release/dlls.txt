@@ -1,0 +1,10 @@
+Core DLLs:
+
+Qt6Gui.dll
+Qt6Core.dll
+Qt6OpenGLWidgets.dll
+Qt6Widgets.dll
+
+Misc DLLs:
+
+Qt6OpenGL.dll
