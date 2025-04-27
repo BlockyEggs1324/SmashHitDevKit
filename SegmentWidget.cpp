@@ -170,7 +170,7 @@ void SegmentWidget::paintGL() {
         //model.rotate(m_cameraYaw)
         model.scale(1.0f, 1.0f, 1.0f);
 
-        getCameraFront()
+        //getCameraFront()
 
         // Setup uniforms:
         QMatrix4x4 mvp = getMVP(model); // however you compute this
