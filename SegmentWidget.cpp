@@ -78,9 +78,9 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
 
     QMatrix4x4 view;
     QVector3D front;
-    front.setX(cosf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
+    front.setX(-cosf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
     front.setY(-sinf(qDegreesToRadians(m_cameraPitch)));
-    front.setZ(sinf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
+    front.setZ(-sinf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
     front.setZ(-front.z());
     front.normalize();
 
@@ -88,7 +88,9 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
     QVector3D up(0.0f, 1.0f, 0.0f);
 
     if (m_gameView) {
-        view.lookAt(QVector3D(0, -1, m_gameViewPosition), QVector3D(0, -1, m_gameViewPosition) + QVector3D(0, 0, -1), up);
+        view.lookAt(QVector3D(0, -1, m_gameViewPosition), // Camera moves
+                    QVector3D(0, -1, 0),                   // Target stays fixed at Z=0
+                    up);
     } else {
         view.lookAt(m_cameraPosition, cameraTarget, up);
     }
@@ -294,40 +296,43 @@ void SegmentWidget::handleInput() {
     if (m_gameView) {
         if (m_pressedKeys.contains(Qt::Key_W)) {
             m_gameViewPosition += m_cameraSpeed;  // Move forward
+            qDebug() << "Moving";
         }
 
         if (m_pressedKeys.contains(Qt::Key_S)) {
             m_gameViewPosition -= m_cameraSpeed;  // Move backwards
+            qDebug() << "Moving";
         }
     } else {
 
         if (m_useShader) {
 
             // Forward direction based on the camera yaw and pitch
-            QVector3D forwardDirection;
-            forwardDirection.setX(cosf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
-            forwardDirection.setY(-sinf(qDegreesToRadians(m_cameraPitch)));  // Inverted Y axis
-            forwardDirection.setZ(sinf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
-            forwardDirection.normalize();
+            QVector3D front;
+            front.setX(-cosf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
+            front.setY(-sinf(qDegreesToRadians(m_cameraPitch)));
+            front.setZ(-sinf(qDegreesToRadians(m_cameraYaw)) * cosf(qDegreesToRadians(m_cameraPitch)));
+            front.setZ(-front.z());
+            front.normalize();
 
             // Right direction is perpendicular to the forward direction and the "up" vector
-            QVector3D rightDirection = QVector3D::crossProduct(forwardDirection, QVector3D(0.0f, 1.0f, 0.0f)).normalized();
+            QVector3D rightDirection = QVector3D::crossProduct(front, QVector3D(0.0f, 1.0f, 0.0f)).normalized();
 
             // Now move based on keys
             if (m_pressedKeys.contains(Qt::Key_W)) {
-                m_cameraPosition += forwardDirection * forwardSpeed;  // Move forward
+                m_cameraPosition -= front * forwardSpeed;  // Move forward
             }
 
             if (m_pressedKeys.contains(Qt::Key_S)) {
-                m_cameraPosition -= forwardDirection * forwardSpeed;  // Move backward
+                m_cameraPosition += front * forwardSpeed;  // Move backward
             }
 
             if (m_pressedKeys.contains(Qt::Key_A)) {
-                m_cameraPosition -= rightDirection * rightSpeed;  // Move left
+                m_cameraPosition += rightDirection * rightSpeed;  // Move left
             }
 
             if (m_pressedKeys.contains(Qt::Key_D)) {
-                m_cameraPosition += rightDirection * rightSpeed;  // Move right
+                m_cameraPosition -= rightDirection * rightSpeed;  // Move right
             }
 
         } else {
