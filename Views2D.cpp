@@ -137,7 +137,11 @@ void BaseViewWidget::paintEvent(QPaintEvent *event) {
             rectPen = QPen(Qt::green, 3);
         }
 
+        rectPen.setCosmetic(true);
+
         painter.setPen(rectPen);
+
+        qDebug() << "Is cosmetic?" << rectPen.isCosmetic();
 
         painter.drawRect(scaled);
         painter.drawLine(scaled.center() - QPointF(xOff, xOff), scaled.center() + QPointF(xOff, xOff));

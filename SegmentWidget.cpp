@@ -252,7 +252,8 @@ void SegmentWidget::paintGL() {
     painter.drawText(10, 25, "3D View");
     painter.end();
 
-    handleInput();
+    if (hasFocus()) handleInput();
+
 }
 
 void SegmentWidget::drawDebugRay() {
@@ -533,7 +534,7 @@ void SegmentWidget::selectCube(const QPoint& mousePos) {
 
     // Apply rotations only around the Z and X axes for yaw and pitch respectively
     rotationMatrix.rotate(m_cameraPitch, QVector3D(1.0f, 0.0f, 0.0f));  // Pitch rotation (around X-axis)
-    rotationMatrix.rotate(m_cameraYaw, QVector3D(0.0f, 1.0f, 0.0f));    // Yaw rotation (around Y-axis)
+    rotationMatrix.rotate(m_cameraYaw - 90.0f, QVector3D(0.0f, 1.0f, 0.0f));    // Yaw rotation (around Y-axis)
 
     // Apply the rotation to the ray direction
     QVector3D rayDirectionInWorldSpace = rotationMatrix.map(rayDirectionInScreenSpace);
