@@ -39,7 +39,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent, Prefs currentPrefs)
     });
     layout->addWidget(rootDirBox);
 
-    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &PreferencesDialog::accept); // Ok button
     //connect(buttonBox, &QDialogButtonBox::clicked, this, &PreferencesDialog::accept); // Apply button
     connect(buttonBox, &QDialogButtonBox::rejected, this, &PreferencesDialog::reject); // Cancel button

@@ -27,6 +27,53 @@ public:
     void resizeEvent(QResizeEvent *event);
     ~MainWindow();
 
+    std::array<float, 4> lerpColour(const std::array<float, 4>& cola, const std::array<float, 4>& colb, float t) {
+        std::array<float, 4> result;
+        for (size_t i = 0; i < 4; ++i) {
+            result[i] = cola[i] + (colb[i] - cola[i]) * t;
+         }
+        return result;
+    }
+
+    void tickFogColour() {
+        constexpr float duration = 1.5f;
+        constexpr float tickInterval = 1.0f / 60.0f; // ~60 FPS
+
+        fogChangeT += tickInterval;
+        float t = std::min(fogChangeT / duration, 1.0f);
+
+        segmentWidget->lowerFogColour = lerpColour(lowerFogStart, lowerFogTarget, t);
+        segmentWidget->upperFogColour = lerpColour(upperFogStart, upperFogTarget, t);
+
+        segmentWidget->update(); // Redraw the OpenGL widget
+
+        if (t >= 1.0f && fogTimer) {
+            fogTimer->stop();
+            fogTimer->deleteLater();
+            fogTimer = nullptr;
+        }
+    }
+
+
+
+    void startFogChange(const std::array<float, 4>& newLower, const std::array<float, 4>& newUpper) {
+        lowerFogStart = segmentWidget->lowerFogColour;
+        upperFogStart = segmentWidget->upperFogColour;
+
+        lowerFogTarget = newLower;
+        upperFogTarget = newUpper;
+
+        fogChangeT = 0.0f;
+
+        if (fogTimer) {
+            fogTimer->stop();
+            fogTimer->deleteLater();
+        }
+
+        fogTimer = new QTimer(this);
+        connect(fogTimer, &QTimer::timeout, this, &MainWindow::tickFogColour);
+        fogTimer->start(1000 / 60); // 60 FPS
+    }
     void loadSegmentFromFile() {
         QString filePath = QFileDialog::getOpenFileName(this, "Open Segment XML", prefs.m_rootDir, "XML Files (*.xml)");
         if (filePath.isEmpty())
@@ -45,8 +92,7 @@ public:
 
         currentRoom = Loader::LoadRoom(filePath, prefs.m_rootDir);
 
-        segmentWidget->lowerFogColour = currentRoom.lowerFog;
-        segmentWidget->upperFogColour = currentRoom.upperFog;
+        startFogChange(currentRoom.lowerFog, currentRoom.upperFog);
 
         std::vector<Box> boxes;
 
@@ -264,7 +310,7 @@ public:
         newPrefs.m_rootDir = settings.value("Editor.rootDir", "C:/").toString();
 
         newPrefs.m_fov = settings.value("3D.fov", 75.0f).toFloat();
-        newPrefs.m_sensitivity = settings.value("3D.sensitivity", 0.1f).toFloat();
+        newPrefs.m_sensitivity = settings.value("3D.sensitivity", 1.0f).toFloat();
 
         return newPrefs;
     }
@@ -313,6 +359,15 @@ private:
     Level currentLevel;
 
     Prefs prefs;
+
+    std::array<float, 4> lowerFogStart;
+    std::array<float, 4> upperFogStart;
+    std::array<float, 4> lowerFogTarget;
+    std::array<float, 4> upperFogTarget;
+
+    float fogChangeT = 0.0f;
+    QTimer* fogTimer = nullptr;
+
 };
 
 #endif // MAINWINDOW_H

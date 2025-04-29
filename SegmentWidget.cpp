@@ -7,10 +7,14 @@ bool contains(const T& container, const U& value) {
     return std::find(container->begin(), container->end(), value) != container->end();
 }
 
+float roundToNearest005(float value) {
+    return std::round(value / 0.05f) * 0.05f;
+}
+
 SegmentWidget::SegmentWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects) : QOpenGLWidget(parent), m_drawWireframe(false), m_drawFaces(true), m_gameView(false), m_drawColour(true), m_cameraPosition(0.0f, 0.0f, 5.0f),
     m_cameraYaw(0.0f), m_cameraPitch(0.0f), m_gameViewPosition(1.0f), m_isDragging(false), m_parent(parent), m_useShader(true), m_selectedRects(selectedRects), m_rects(rects) {
     m_cameraSpeed = 0.1f;
-    m_mouseSensitivity = 0.1f;  // Adjust this for faster/slower rotation
+    m_mouseSensitivity = 1.0f;  // Adjust this for faster/slower rotation
     setFocusPolicy(Qt::StrongFocus);
 
     QTimer *timer = new QTimer(this);
@@ -45,7 +49,8 @@ void SegmentWidget::initializeGL() {
     glClearDepth(1.0);
     glDepthMask(GL_TRUE); // Ensure depth writing
 
-    m_shaderProgram = createShaderProgram("fog.vert", "fog.frag");
+    m_roomShader = createShaderProgram("room.vert", "room.frag");
+    m_clearShader = createShaderProgram("clear.vert", "clear.frag");
 }
 
 void SegmentWidget::resizeGL(int w, int h) {
@@ -88,12 +93,14 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
     QVector3D up(0.0f, 1.0f, 0.0f);
 
     if (m_gameView) {
-        view.lookAt(QVector3D(0, -1, m_gameViewPosition), // Camera moves
-                    QVector3D(0, -1, 0),                   // Target stays fixed at Z=0
-                    up);
+        QVector3D eye(0, 0, -m_gameViewPosition); // Camera moves along Z
+        QVector3D target = eye + QVector3D(0, 0, -1); // Look forward (toward -Z)
+        view.lookAt(eye, target, up);
     } else {
         view.lookAt(m_cameraPosition, cameraTarget, up);
     }
+
+    //qDebug() << view;
 
     return projection * view * model;
 }
@@ -101,9 +108,9 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
 void SegmentWidget::drawFogOverlay() {
     float distance = 1000.0f; // Half size (cube is 2000x2000x2000 around camera)
 
-    float x = m_cameraPosition.x();
-    float y = m_cameraPosition.y();
-    float z = m_cameraPosition.z();
+    float x = -m_cameraPosition.x();
+    float y = -m_cameraPosition.y();
+    float z = -m_cameraPosition.z();
 
     float half = distance / 2.0f;
 
@@ -156,13 +163,12 @@ void SegmentWidget::drawFogOverlay() {
 
 void SegmentWidget::paintGL() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]);
     glEnable(GL_DEPTH_TEST);
     //glLoadIdentity();
     glLoadMatrixf(glm::value_ptr(projectionMatrix));
 
     if (m_useShader) {
-
-        glUseProgram(m_shaderProgram);
 
         QMatrix4x4 model;
 
@@ -175,18 +181,65 @@ void SegmentWidget::paintGL() {
         //getCameraFront()
 
         // Setup uniforms:
-        QMatrix4x4 mvp = getMVP(model); // however you compute this
-        glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
+        QMatrix4x4 mvp = getMVP(model);
 
-        glUniform4f(glGetUniformLocation(m_shaderProgram, "uLowerFog"), lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]); // your lower fog color
-        glUniform4f(glGetUniformLocation(m_shaderProgram, "uUpperFog"), upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]); // your upper fog color
+        glUseProgram(m_clearShader);
+
+        glUniformMatrix4fv(glGetUniformLocation(m_clearShader, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
+
+        glUniform4f(glGetUniformLocation(m_clearShader, "uLowerFog"), lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]); // your lower fog color
+        glUniform4f(glGetUniformLocation(m_clearShader, "uUpperFog"), upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]); // your upper fog color
+
+        // Disable depth testing while rendering fog
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+
+        // Fullscreen quad in NDC (Normalized Device Coordinates)
+        float fullscreenQuad[] = {
+            -1.0f, -1.0f,
+            1.0f, -1.0f,
+            1.0f,  1.0f,
+            -1.0f,  1.0f
+        };
+
+        GLuint vbo;
+        glGenBuffers(1, &vbo);  // Generate buffer
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);  // Bind the buffer
+        glBufferData(GL_ARRAY_BUFFER, sizeof(fullscreenQuad), fullscreenQuad, GL_STATIC_DRAW);  // Upload data to GPU
+
+        GLint posAttrib = glGetAttribLocation(m_clearShader, "aPosition");
+        glEnableVertexAttribArray(posAttrib);
+        glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+
+        // Draw fullscreen quad
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+        // Cleanup
+        glDisableVertexAttribArray(posAttrib);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);  // Unbind buffer
+        glDeleteBuffers(1, &vbo);  // Delete buffer
+
+        // Restore state
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+
+        glUseProgram(m_roomShader);
+
+        glUniformMatrix4fv(glGetUniformLocation(m_roomShader, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
+
+        // Create a single white pixel
+        uint8_t whitePixel[4] = { 255, 255, 255, 255 };
+
+        glUniform4f(glGetUniformLocation(m_roomShader, "uColor"), whitePixel[0], whitePixel[1], whitePixel[2], whitePixel[3]);
+
+        glUniform4f(glGetUniformLocation(m_roomShader, "uLowerFog"), lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]); // your lower fog color
+        glUniform4f(glGetUniformLocation(m_roomShader, "uUpperFog"), upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]); // your upper fog color
 
         GLuint yourTextureID;
         glGenTextures(1, &yourTextureID);
         glBindTexture(GL_TEXTURE_2D, yourTextureID);
 
-        // Create a single white pixel
-        uint8_t whitePixel[4] = { 255, 255, 0, 255 };
+
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
 
@@ -197,9 +250,7 @@ void SegmentWidget::paintGL() {
         // Bind your texture to texture unit 0
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, yourTextureID);
-        glUniform1i(glGetUniformLocation(m_shaderProgram, "uTexture0"), 0);
-
-        //drawFogOverlay();
+        glUniform1i(glGetUniformLocation(m_roomShader, "uTexture0"), 0);
 
     } else {
         if (m_gameView) {
@@ -218,8 +269,6 @@ void SegmentWidget::paintGL() {
 
         }
     }
-
-
 
     if (m_drawFaces) {
         // Draw filled cubes
@@ -297,12 +346,12 @@ void SegmentWidget::handleInput() {
     if (m_gameView) {
         if (m_pressedKeys.contains(Qt::Key_W)) {
             m_gameViewPosition += m_cameraSpeed;  // Move forward
-            qDebug() << "Moving";
+            qDebug() << "Moving to" << m_gameViewPosition;
         }
 
         if (m_pressedKeys.contains(Qt::Key_S)) {
             m_gameViewPosition -= m_cameraSpeed;  // Move backwards
-            qDebug() << "Moving";
+            qDebug() << "Moving to" << m_gameViewPosition;
         }
     } else {
 
@@ -603,6 +652,31 @@ void SegmentWidget::keyPressEvent(QKeyEvent *event) {
         auto window = qobject_cast<MainWindow*>(m_parent);
         window->toggleGameView->setChecked(m_gameView);
     }
+    if (event->key() == Qt::Key_F7) {
+        if (!m_rects->empty()) {
+
+            const Rect3D* minZCube = nullptr;
+            const Rect3D* maxZCube = nullptr;
+
+            for (const auto& cube : *m_rects) {
+                if (!minZCube || cube.position().z() < minZCube->position().z()) {
+                    minZCube = &cube;
+                }
+                if (!maxZCube || cube.position().z() > maxZCube->position().z()) {
+                    maxZCube = &cube;
+                }
+            }
+
+            if (minZCube && maxZCube) {
+                float zDistance = std::abs(maxZCube->position().z() - minZCube->position().z());
+
+                m_cameraSpeed = zDistance / (30.0f * 240.0f);
+                qDebug() << "Distance along Z axis between furthest and closest cubes:" << zDistance;
+            }
+
+        }
+
+    }
     if (event->key() == Qt::Key_F8) {
         m_gameViewPosition = 0.0f;
     }
@@ -638,14 +712,14 @@ void SegmentWidget::wheelEvent(QWheelEvent *event) {
 
     // Depending on the scroll direction, do something
     if (delta > 0) {
-        if (m_cameraSpeed <= 0.05f) {
+        if (m_cameraSpeed <= 0.06f) {
             m_cameraSpeed = 0.05f;
         } else if (m_cameraSpeed <= 10.0f) {
-            m_cameraSpeed += 0.05f;
+            m_cameraSpeed = roundToNearest005(m_cameraSpeed + 0.05f);
         }
     } else if (delta < 0) {
-        if (m_cameraSpeed >= 0.05f) {
-            m_cameraSpeed -= 0.05f;
+        if (m_cameraSpeed >= 0.04f) {
+            m_cameraSpeed = roundToNearest005(m_cameraSpeed - 0.05f);
         } else {
             m_cameraSpeed = 0.01f;
         }
@@ -663,8 +737,8 @@ void SegmentWidget::mouseMoveEvent(QMouseEvent *event) {
         m_lastMousePos = event->pos();
 
         // Update yaw and pitch based on mouse movement
-        m_cameraYaw -= delta.x() * m_mouseSensitivity;  // Horizontal movement (yaw)
-        m_cameraPitch -= delta.y() * m_mouseSensitivity;  // Vertical movement (pitch)
+        m_cameraYaw -= delta.x() * m_mouseSensitivity / 10;  // Horizontal movement (yaw)
+        m_cameraPitch -= delta.y() * m_mouseSensitivity / 10;  // Vertical movement (pitch)
 
         // Clamp pitch to prevent flipping
         if (m_cameraPitch > 89.0f) m_cameraPitch = 89.0f;
@@ -701,6 +775,7 @@ GLuint SegmentWidget::loadShaderFromFile(const QString& path, GLenum type) {
         glGetShaderInfoLog(shader, 512, nullptr, log);
         qDebug() << "Shader compile error:" << log;
         glDeleteShader(shader);
+        m_useShader = false;
         return 0;
     }
     return shader;
@@ -723,6 +798,7 @@ GLuint SegmentWidget::createShaderProgram(const QString& vertexPath, const QStri
         glGetProgramInfoLog(program, 512, nullptr, log);
         qDebug() << "Shader link error:" << log;
         glDeleteProgram(program);
+        m_useShader = false;
         return 0;
     }
 

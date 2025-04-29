@@ -19,9 +19,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     segmentWidget = new SegmentWidget(this, &m_rects, &m_selectedRects);  // 3D view widget
 
-    //segmentWidget->setFov(prefs.m_fov);
-    //segmentWidget->setSens(prefs.m_sensitivity);
-
     outliner = new QTreeWidget;
     outliner->setColumnCount(1); // Only one column for display
     outliner->setHeaderHidden(true);
@@ -40,20 +37,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     editMenu->setStyleSheet(style);
     viewMenu->setStyleSheet(style);
 
-    QAction *loadSegmentAction = new QAction("&Load Segment", this);
-    fileMenu->addAction(loadSegmentAction);
+    QMenu *openMenu = new QMenu("&Open", this);
+    openMenu->setStyleSheet(style);
+    fileMenu->addMenu(openMenu);
+
+    QAction *loadSegmentAction = new QAction("Open &Segment", this);
+    openMenu->addAction(loadSegmentAction);
     connect(loadSegmentAction, &QAction::triggered, this, &MainWindow::loadSegmentFromFile);
 
-    QAction *loadRoomAction = new QAction("Load Room", this);
-    fileMenu->addAction(loadRoomAction);
+    QAction *loadRoomAction = new QAction("Open &Room", this);
+    openMenu->addAction(loadRoomAction);
     connect(loadRoomAction, &QAction::triggered, this, &MainWindow::loadRoomFromFile);
 
-    QAction *loadLevelAction = new QAction("Load Level", this);
-    fileMenu->addAction(loadLevelAction);
+    QAction *loadLevelAction = new QAction("Open &Level", this);
+    openMenu->addAction(loadLevelAction);
     connect(loadLevelAction, &QAction::triggered, this, &MainWindow::loadLevelFromFile);
 
-    QAction *loadGameAction = new QAction("Load all game levels", this);
-    fileMenu->addAction(loadGameAction);
+    QAction *loadGameAction = new QAction("Open All &Game Levels", this);
+    openMenu->addAction(loadGameAction);
     connect(loadGameAction, &QAction::triggered, this, &MainWindow::loadGame);
 
     fileMenu->addSeparator();
@@ -143,6 +144,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setWindowTitle("Smash Hit DevKit");
     setGeometry(100, 100, 1200, 675);
     layout->setGeometry(QRect(0, 0, 1200, 675));
+
+    //segmentWidget->setFov(prefs.m_fov);
+    //segmentWidget->setSens(prefs.m_sensitivity);
 
 }
 

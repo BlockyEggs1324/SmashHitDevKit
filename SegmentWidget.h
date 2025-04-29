@@ -151,7 +151,8 @@ private:
         glm::vec3& out_direction);
 
     // Fog shader stuff
-    GLuint m_shaderProgram = 0;
+    GLuint m_roomShader = 0;
+    GLuint m_clearShader = 1;
     GLuint loadShaderFromFile(const QString& path, GLenum type);
     GLuint createShaderProgram(const QString& vertexPath, const QString& fragmentPath);
 
