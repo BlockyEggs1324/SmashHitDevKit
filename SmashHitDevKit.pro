@@ -32,11 +32,6 @@ HEADERS += \
     Views2D.h \
     mainwindow.h
 
-FORMS += \
-    #mainwindow.ui
-
-TRANSLATIONS +=
-
 CONFIG += lrelease
 CONFIG += embed_translations
 
