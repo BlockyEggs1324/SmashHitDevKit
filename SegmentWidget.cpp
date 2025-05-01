@@ -1,5 +1,6 @@
 #include "SegmentWidget.h"
-#include "mainwindow.h"
+#include "MainWindow.h"
+#include <GL/glu.h>
 
 // Template function to check if a value is in the container
 template <typename T, typename U>
@@ -11,7 +12,7 @@ float roundToNearest005(float value) {
     return std::round(value / 0.05f) * 0.05f;
 }
 
-SegmentWidget::SegmentWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects) : QOpenGLWidget(parent), m_drawWireframe(false), m_drawFaces(true), m_gameView(false), m_drawColour(true), m_cameraPosition(0.0f, 0.0f, 5.0f),
+SegmentWidget::SegmentWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects) : QOpenGLWidget(parent), m_drawWireframe(false), m_drawFaces(true), m_gameView(false), m_drawColour(true), m_cameraPosition(0.0f, 0.0f, 0.0f),
     m_cameraYaw(0.0f), m_cameraPitch(0.0f), m_gameViewPosition(1.0f), m_isDragging(false), m_parent(parent), m_useShader(true), m_selectedRects(selectedRects), m_rects(rects) {
     m_cameraSpeed = 0.1f;
     m_mouseSensitivity = 1.0f;  // Adjust this for faster/slower rotation
@@ -26,7 +27,28 @@ SegmentWidget::SegmentWidget(QWidget *parent, std::vector<Rect3D> *rects, std::v
     }
 
     m_glToggle = true;
-    m_cameraFov = 70.0f;    
+    m_cameraFov = 70.0f;
+}
+
+void SegmentWidget::loadTileTexture() {
+    QString program = "Tools/mtxconv.exe";
+    QStringList arguments;
+    arguments << "extract" << (m_rootDir + "/gfx/tiles.png.mtx");
+
+    qDebug() << program << arguments;
+
+    QProcess proc;
+    proc.setWorkingDirectory(QCoreApplication::applicationDirPath() + "temp/"); // Optional: sets working dir if needed
+    proc.start(program, arguments);
+    proc.waitForFinished(-1); // wait until it's done
+
+
+    //command = QString("move ")
+
+}
+
+void SegmentWidget::setRootDir(QString rootDir) {
+    m_rootDir = rootDir;
 }
 
 void SegmentWidget::setFov(int value) {
@@ -105,83 +127,28 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
     return projection * view * model;
 }
 
-void SegmentWidget::drawFogOverlay() {
-    float distance = 1000.0f; // Half size (cube is 2000x2000x2000 around camera)
-
-    float x = -m_cameraPosition.x();
-    float y = -m_cameraPosition.y();
-    float z = -m_cameraPosition.z();
-
-    float half = distance / 2.0f;
-
-    // Each face will be a thin box (very small thickness)
-
-    // Positive X face
-    Rect3D x1(
-        QVector3D(x + half, y, z),
-        QVector3D(0.1f, distance, distance) // thin in X, full in YZ
-    );
-
-    // Negative X face
-    Rect3D x2(
-        QVector3D(x - half, y, z),
-        QVector3D(0.1f, distance, distance)
-    );
-
-    // Positive Y face
-    Rect3D y1(
-        QVector3D(x, y + half, z),
-        QVector3D(distance, 0.1f, distance) // thin in Y, full in XZ
-     );
-
-    // Negative Y face
-    Rect3D y2(
-        QVector3D(x, y - half, z),
-        QVector3D(distance, 0.1f, distance)
-    );
-
-    // Positive Z face
-    Rect3D z1(
-        QVector3D(x, y, z + half),
-        QVector3D(distance, distance, 0.1f) // thin in Z, full in XY
-    );
-
-    // Negative Z face
-    Rect3D z2(
-        QVector3D(x, y, z - half),
-        QVector3D(distance, distance, 0.1f)
-    );
-
-    drawCubeSpecial(x1);
-    drawCubeSpecial(x2);
-    drawCubeSpecial(y1);
-    drawCubeSpecial(y2);
-    drawCubeSpecial(z1);
-    drawCubeSpecial(z2);
-
-}
-
 void SegmentWidget::paintGL() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
     //glLoadIdentity();
     glLoadMatrixf(glm::value_ptr(projectionMatrix));
 
     if (m_useShader) {
 
-        QMatrix4x4 model;
+        m_model = QMatrix4x4();
 
-        if (m_gameView) model.translate(0, -1, m_gameViewPosition);
-        else model.translate(-m_cameraPosition.x(), -m_cameraPosition.y(), -m_cameraPosition.z());
+        if (m_gameView) m_model.translate(0, -1, m_gameViewPosition);
+        else m_model.translate(-m_cameraPosition.x(), -m_cameraPosition.y(), -m_cameraPosition.z());
 
         //model.rotate(m_cameraYaw)
-        model.scale(1.0f, 1.0f, 1.0f);
+        m_model.scale(1.0f, 1.0f, 1.0f);
 
         //getCameraFront()
 
         // Setup uniforms:
-        QMatrix4x4 mvp = getMVP(model);
+        QMatrix4x4 mvp = getMVP(m_model);
 
         glUseProgram(m_clearShader);
 
@@ -228,7 +195,7 @@ void SegmentWidget::paintGL() {
         glUniformMatrix4fv(glGetUniformLocation(m_roomShader, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
 
         // Create a single white pixel
-        uint8_t whitePixel[4] = { 255, 255, 255, 255 };
+        uint8_t whitePixel[] = { 255, 255, 255, 255, 255, 255, 255, 255, 255};
 
         glUniform4f(glGetUniformLocation(m_roomShader, "uColor"), whitePixel[0], whitePixel[1], whitePixel[2], whitePixel[3]);
 
@@ -238,8 +205,6 @@ void SegmentWidget::paintGL() {
         GLuint yourTextureID;
         glGenTextures(1, &yourTextureID);
         glBindTexture(GL_TEXTURE_2D, yourTextureID);
-
-
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
 
@@ -555,6 +520,36 @@ glm::mat4 SegmentWidget::computeCubeTransform(const Rect3D& cube) {
     return translation * scale;
 }
 
+glm::mat4 toMat4(const QMatrix4x4& mat) {
+    glm::mat4 result;
+
+    // QMatrix4x4 is row-major, glm::mat4 is column-major
+    // But OpenGL expects column-major, so we transpose while copying
+    const float* data = mat.constData(); // returns pointer to 16 floats (row-major)
+
+    // Transpose into glm::mat4
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            result[col][row] = data[row * 4 + col]; // transpose
+        }
+    }
+
+    return result;
+}
+
+void qMatrix4x4ToDoubleArray(const QMatrix4x4& mat, double* out) {
+    const float* data = mat.constData();
+    for (int i = 0; i < 16; ++i)
+        out[i] = static_cast<double>(data[i]);
+}
+
+void glmMat4ToDoubleArray(const glm::mat4& mat, double* out)
+{
+    // glm is column-major, just like OpenGL expects
+    for (int i = 0; i < 16; ++i)
+        out[i] = static_cast<double>(glm::value_ptr(mat)[i]);
+}
+
 void SegmentWidget::selectCube(const QPoint& mousePos) {
 
     int x = mousePos.x();
@@ -565,7 +560,7 @@ void SegmentWidget::selectCube(const QPoint& mousePos) {
     float ndcY = 1.0f - (2.0f * y) / height(); // Normalize Y to [-1, 1] and flip Y
 
     // Use FOV to adjust the ray's scale. (For example, let's assume FOV is 45 degrees)
-    float fov = 45.0f;  // Field of view in degrees (adjust as necessary)
+    float fov = m_cameraFov;  // Field of view in degrees (adjust as necessary)
     float aspectRatio = (float)width() / height();
     float fovRad = glm::radians(fov);  // Convert to radians
 
@@ -597,8 +592,9 @@ void SegmentWidget::selectCube(const QPoint& mousePos) {
     // Now the ray direction in world space is ready to be used
     glm::vec3 rayDirection = toVec3(rayDirectionInWorldSpace);  // Convert to your custom type if necessary
 
-    m_debugRayStart = rayOrigin;
-    m_debugRayEnd = rayOrigin + rayDirection * 100.0f;
+    m_debugRayStart = rayOrigin * 2.0f;
+
+    m_debugRayEnd = m_debugRayStart + rayDirection * 20.0f;
     m_drawDebugRay = true;
 
     Rect3D* selectedCube = nullptr;
@@ -608,7 +604,7 @@ void SegmentWidget::selectCube(const QPoint& mousePos) {
 
     // 4. Test intersections
     for(Rect3D& cube : *m_rects) {
-        if (intersects(rayDirection, rayOrigin, cube)) {
+        if (intersects(rayDirection, m_debugRayStart, cube)) {
             m_selectedRects->push_back(&cube);
             selectedCube = &cube;
             found = true;
@@ -749,8 +745,6 @@ void SegmentWidget::mouseMoveEvent(QMouseEvent *event) {
 
         // Reset cursor to the center of the widget
         QCursor::setPos(mapToGlobal(center));
-
-        update();  // Request a repaint after camera rotation
     }
 }
 
@@ -807,33 +801,6 @@ GLuint SegmentWidget::createShaderProgram(const QString& vertexPath, const QStri
     return program;
 }
 
-void SegmentWidget::drawCubeSpecial(const Rect3D& cubeRect) {
-
-    float x0 = cubeRect.x() - cubeRect.width();
-    float x1 = cubeRect.x() + cubeRect.width();
-    float y0 = cubeRect.y() - cubeRect.height();
-    float y1 = cubeRect.y() + cubeRect.height();
-    float z0 = cubeRect.z() - cubeRect.depth();
-    float z1 = cubeRect.z() + cubeRect.depth();
-
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(1.0, 1.0);
-
-    glBegin(GL_QUADS);
-
-    glColor3f(1.0f, 1.0f, 1.0f);
-
-    glVertex3f(x0, y0, z1); glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
-    glVertex3f(x1, y0, z0); glVertex3f(x0, y0, z0); glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0);
-    glVertex3f(x0, y0, z0); glVertex3f(x0, y0, z1); glVertex3f(x0, y1, z1); glVertex3f(x0, y1, z0);
-    glVertex3f(x1, y0, z1); glVertex3f(x1, y0, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y1, z1);
-    glVertex3f(x0, y1, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y1, z0); glVertex3f(x0, y1, z0);
-    glVertex3f(x0, y0, z0); glVertex3f(x1, y0, z0); glVertex3f(x1, y0, z1); glVertex3f(x0, y0, z1);
-
-    glEnd();
-    glDisable(GL_POLYGON_OFFSET_FILL);
-}
-
 void SegmentWidget::drawCube(const Rect3D& cubeRect, bool selected) {
     float x0 = cubeRect.x() - cubeRect.width();
     float x1 = cubeRect.x() + cubeRect.width();
@@ -850,7 +817,10 @@ void SegmentWidget::drawCube(const Rect3D& cubeRect, bool selected) {
     if (!selected) {
 
         if (m_drawColour) {
-            glColor3f(cubeRect.m_colour[0], cubeRect.m_colour[1], cubeRect.m_colour[2]);
+
+            auto colour = cubeRect.getColour();
+
+            glColor3f(colour[0], colour[1], colour[2]);
 
             glVertex3f(x0, y0, z1); glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
             glVertex3f(x1, y0, z0); glVertex3f(x0, y0, z0); glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0);
@@ -883,10 +853,12 @@ void SegmentWidget::drawCube(const Rect3D& cubeRect, bool selected) {
 
     // Draw grid lines (if m_drawColour is true)
     if (m_drawColour) {
+
+        auto colour = cubeRect.getColour();
         glColor3f(
-            cubeRect.m_colour[0] * 0.7f,
-            cubeRect.m_colour[1] * 0.7f,
-            cubeRect.m_colour[2] * 0.7f
+            colour[0] * 0.7f,
+            colour[1] * 0.7f,
+            colour[2] * 0.7f
             );
 
         glLineWidth(2.0f);  // <-- Make the grid lines thicker (default is 1.0)

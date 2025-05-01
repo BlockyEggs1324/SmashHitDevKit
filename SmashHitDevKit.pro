@@ -14,23 +14,24 @@ CONFIG += c++17
 
 SOURCES += \
     LevelLoader.cpp \
+    MainWindow.cpp \
     PreferencesDialog.cpp \
     RoomLoader.cpp \
     SegmentLoader.cpp \
     SegmentWidget.cpp \
     Views2D.cpp \
-    main.cpp \
-    mainwindow.cpp
+    main.cpp
 
 HEADERS += \
     LevelLoader.h \
+    MainWindow.h \
     PreferencesDialog.h \
     Rect3D.h \
     RoomLoader.h \
     SegmentLoader.h \
     SegmentWidget.h \
-    Views2D.h \
-    mainwindow.h
+    TextureLoader.h \
+    Views2D.h
 
 CONFIG += lrelease
 CONFIG += embed_translations

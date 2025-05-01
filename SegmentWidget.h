@@ -63,9 +63,11 @@ public:
     std::vector<Rect3D> getRects();
 
     void setRects(const std::vector<Rect3D>& newRects);
+    void loadTileTexture();
 
     void setFov(int value);
     void setSens(float value);
+    void setRootDir(QString rootDir);
 
     bool m_drawWireframe;
     bool m_drawFaces;
@@ -129,12 +131,15 @@ private:
     std::vector<Rect3D> *m_rects;
     QSet<int> m_pressedKeys;
 
+    QString m_rootDir;
+
     glm::vec3 rayWorld;
 
     bool m_drawDebugRay = true;
     glm::vec3 m_debugRayStart;
     glm::vec3 m_debugRayDir;
     glm::vec3 m_debugRayEnd;
+    QMatrix4x4 m_model;
 
     glm::mat4 computeCubeTransform(const Rect3D& cube);
 
@@ -149,6 +154,8 @@ private:
         const glm::mat4& ProjectionMatrix,
         glm::vec3& out_origin,
         glm::vec3& out_direction);
+
+    GLuint tileTexture;
 
     // Fog shader stuff
     GLuint m_roomShader = 0;

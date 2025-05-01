@@ -76,11 +76,12 @@ public:
         return !(*this == other);
     }
 
-    std::array<GLfloat, 3> m_colour = {1.0f, 1.0f, 1.0f};
+
 
 private:
     QVector3D m_position;  // Position in 3D space (x, y, z)
     QVector3D m_size;      // Size (width, height, depth) in 3D space
+    std::array<GLfloat, 3> m_colour = {1.0f, 1.0f, 0.0f};
 };
 
 #endif // RECT3D_H

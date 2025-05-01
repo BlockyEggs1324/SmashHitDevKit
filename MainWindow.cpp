@@ -1,4 +1,4 @@
-#include "mainwindow.h"
+#include "MainWindow.h"
 
 #include <QMenu>
 #include <QMenuBar>
@@ -18,6 +18,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     yzView = new YZViewWidget(this, &m_rects, &m_selectedRects);
 
     segmentWidget = new SegmentWidget(this, &m_rects, &m_selectedRects);  // 3D view widget
+
+    segmentWidget->setRootDir(prefs.m_rootDir);
+    segmentWidget->loadTileTexture();
 
     outliner = new QTreeWidget;
     outliner->setColumnCount(1); // Only one column for display
