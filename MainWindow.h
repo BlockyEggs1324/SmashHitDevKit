@@ -308,6 +308,7 @@ public:
         Prefs newPrefs;
 
         newPrefs.m_rootDir = settings.value("Editor.rootDir", "C:/").toString();
+        newPrefs.m_theme = settings.value("Editor.theme", "System Theme").toString();
 
         newPrefs.m_fov = settings.value("3D.fov", 75.0f).toFloat();
         newPrefs.m_sensitivity = settings.value("3D.sensitivity", 1.0f).toFloat();
@@ -319,6 +320,7 @@ public:
         QSettings settings("settings.ini", QSettings::Format::IniFormat);
 
         settings.setValue("Editor.rootDir", prefs.m_rootDir);
+        settings.setValue("Editor.theme", prefs.m_theme);
 
         settings.setValue("3D.fov", prefs.m_fov);
         settings.setValue("3D.sensitivity", prefs.m_sensitivity);
@@ -348,11 +350,19 @@ private:
 
     QTreeWidget* outliner;
 
+    QMenu *fileMenu;
+    QMenu *editMenu;
+    QMenu *viewMenu;
+
     // Create the 3D segment widget
     SegmentWidget *segmentWidget; // 3D view widget
 
     std::vector<Rect3D> m_rects;
     std::vector<Rect3D*> m_selectedRects;
+
+    ViewOption m_option;
+
+    void setTheme(QString theme);
 
     Segment currentSegment;
     Room currentRoom;

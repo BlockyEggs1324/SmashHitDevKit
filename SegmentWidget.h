@@ -3,6 +3,7 @@
 
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
+#include <QOpenGLFunctions_3_3_Core>
 #include <QWidget>
 #include <QTimer>
 #include <Qt3DExtras/Qt3DWindow>
@@ -54,7 +55,7 @@ namespace glm {
     }
 }
 
-class SegmentWidget : public QOpenGLWidget, protected QOpenGLFunctions {
+class SegmentWidget : public QOpenGLWidget, public QOpenGLFunctions_3_3_Core {
     Q_OBJECT
 
 public:
@@ -87,8 +88,6 @@ protected:
     void handleInput();
 
     bool intersects(const glm::vec3& ray, const glm::vec3& rayOrigin, const Rect3D& cube);
-
-    glm::vec3 toVec3(QVector3D vec) const;
 
     glm::vec3 getCameraFront() const;
 
@@ -155,11 +154,15 @@ private:
         glm::vec3& out_origin,
         glm::vec3& out_direction);
 
-    GLuint tileTexture;
+    GLuint m_tileTexture;
+    GLuint loadTexture(QString filename);
+    const unsigned char *tileData;
 
     // Fog shader stuff
     GLuint m_roomShader = 0;
     GLuint m_clearShader = 1;
+    GLuint m_basicShader = 2;
+
     GLuint loadShaderFromFile(const QString& path, GLenum type);
     GLuint createShaderProgram(const QString& vertexPath, const QString& fragmentPath);
 
@@ -169,9 +172,9 @@ private:
 
     void drawDebugRay();
 
-    void drawFogOverlay();
-
     void drawCubeSpecial(const Rect3D& cubeRect);
+
+    void drawCubeNew(const Rect3D& rect, bool selected);
 
     void drawCube(const Rect3D& cubeRect, bool selected = false);
 

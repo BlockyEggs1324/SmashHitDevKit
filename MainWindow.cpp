@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "qapplication.h"
 
 #include <QMenu>
 #include <QMenuBar>
@@ -8,27 +9,35 @@
 #include <QToolBar>
 #include <QDockWidget>
 #include <QListWidget>
+#include <QProxyStyle>
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOption::Select) {
+
+    this->setWindowState(Qt::WindowStates::enum_type::WindowMaximized);
 
     prefs = loadPrefs();
 
-    xyView = new XYViewWidget(this, &m_rects, &m_selectedRects);
-    xzView = new XZViewWidget(this, &m_rects, &m_selectedRects);
-    yzView = new YZViewWidget(this, &m_rects, &m_selectedRects);
+    xyView = new XYViewWidget(this, &m_rects, &m_selectedRects, &m_option);
+    xzView = new XZViewWidget(this, &m_rects, &m_selectedRects, &m_option);
+    yzView = new YZViewWidget(this, &m_rects, &m_selectedRects, &m_option);
 
     segmentWidget = new SegmentWidget(this, &m_rects, &m_selectedRects);  // 3D view widget
 
     segmentWidget->setRootDir(prefs.m_rootDir);
-    segmentWidget->loadTileTexture();
+    segmentWidget->setFov(prefs.m_fov);
+    segmentWidget->setSens(prefs.m_sensitivity);
 
     outliner = new QTreeWidget;
     outliner->setColumnCount(1); // Only one column for display
-    outliner->setHeaderHidden(true);
+    outliner->setHeaderHidden(true); 
 
-    QMenu *fileMenu = menuBar()->addMenu("&File");
-    QMenu *editMenu = menuBar()->addMenu("&Edit");
-    QMenu *viewMenu = menuBar()->addMenu("&View");
+    fileMenu = menuBar()->addMenu("&File");
+    editMenu = menuBar()->addMenu("&Edit");
+    viewMenu = menuBar()->addMenu("&View");
+
+    qDebug() << prefs.m_theme;
+
+    setTheme(prefs.m_theme);
 
     QString style = "QMenu::item { padding:2px 20px 2px 20px; border:1px solid transparent; }"
                     "QMenu::item:selected { border-color:rgba(168, 201, 233, 170); background:rgba(111, 183, 255, 170); }"
@@ -118,14 +127,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QSplitter *leftColumn = new QSplitter(Qt::Vertical);
 
     leftColumn->addWidget(segmentWidget);
-    leftColumn->addWidget(yzView);
+    leftColumn->addWidget(xyView);
+
     leftColumn->setStretchFactor(0, 1); // 3D view takes up more space
     leftColumn->setStretchFactor(1, 1); // YZ view takes up less space
 
     // Right column (XY over XZ)
     QSplitter *rightColumn = new QSplitter(Qt::Vertical);
-    rightColumn->addWidget(xyView);
     rightColumn->addWidget(xzView);
+    rightColumn->addWidget(yzView);
     rightColumn->setStretchFactor(0, 1); // Both views have equal space in the right column
     rightColumn->setStretchFactor(1, 1);
 
@@ -146,11 +156,96 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     setWindowTitle("Smash Hit DevKit");
     setGeometry(100, 100, 1200, 675);
-    layout->setGeometry(QRect(0, 0, 1200, 675));
+    //layout->setGeometry(QRect(0, 0, 1200, 675));
 
     //segmentWidget->setFov(prefs.m_fov);
     //segmentWidget->setSens(prefs.m_sensitivity);
 
+}
+
+void MainWindow::setTheme(QString theme) {
+
+    QPalette lightPalette;
+    lightPalette.setColor(QPalette::Window, QColor(240, 240, 240));
+    lightPalette.setColor(QPalette::WindowText, Qt::black);
+    lightPalette.setColor(QPalette::Base, Qt::white);
+    lightPalette.setColor(QPalette::AlternateBase, QColor(225, 225, 225));
+    lightPalette.setColor(QPalette::ToolTipBase, Qt::white);
+    lightPalette.setColor(QPalette::ToolTipText, Qt::black);
+    lightPalette.setColor(QPalette::Text, Qt::black);
+    lightPalette.setColor(QPalette::Button, QColor(240, 240, 240));
+    lightPalette.setColor(QPalette::ButtonText, Qt::black);
+    lightPalette.setColor(QPalette::BrightText, Qt::red);
+    lightPalette.setColor(QPalette::Link, QColor(0, 120, 215));
+    lightPalette.setColor(QPalette::Highlight, QColor(0, 120, 215));
+    lightPalette.setColor(QPalette::HighlightedText, Qt::white);
+
+    QPalette darkPalette;
+    darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
+    darkPalette.setColor(QPalette::WindowText, Qt::white);
+    darkPalette.setColor(QPalette::Base, QColor(42, 42, 42));
+    darkPalette.setColor(QPalette::AlternateBase, QColor(66, 66, 66));
+    darkPalette.setColor(QPalette::ToolTipBase, Qt::white);
+    darkPalette.setColor(QPalette::ToolTipText, Qt::white);
+    darkPalette.setColor(QPalette::Text, Qt::white);
+    darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+    darkPalette.setColor(QPalette::ButtonText, Qt::white);
+    darkPalette.setColor(QPalette::BrightText, Qt::red);
+    darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
+    darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    darkPalette.setColor(QPalette::HighlightedText, Qt::black);
+
+    QPalette darkPurplePalette;
+    darkPurplePalette.setColor(QPalette::Window, QColor(43, 23, 43));
+    darkPurplePalette.setColor(QPalette::WindowText, QColor(147, 6, 246));
+    darkPurplePalette.setColor(QPalette::Base, QColor(25, 3, 25));
+    darkPurplePalette.setColor(QPalette::AlternateBase, QColor(43, 43, 43));
+    darkPurplePalette.setColor(QPalette::ToolTipBase, Qt::white);
+    darkPurplePalette.setColor(QPalette::ToolTipText, Qt::white);
+    darkPurplePalette.setColor(QPalette::Text, QColor(147, 6, 246));
+    darkPurplePalette.setColor(QPalette::Button, QColor(43, 43, 43));
+    darkPurplePalette.setColor(QPalette::ButtonText, QColor(147, 6, 246));
+    darkPurplePalette.setColor(QPalette::BrightText, Qt::red);
+    darkPurplePalette.setColor(QPalette::Link, QColor(42, 130, 218));
+    darkPurplePalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    darkPurplePalette.setColor(QPalette::HighlightedText, Qt::black);
+
+    QPalette swampPalette;
+    swampPalette.setColor(QPalette::Window, QColor(0, 32, 39));
+    swampPalette.setColor(QPalette::WindowText, Qt::white);
+    swampPalette.setColor(QPalette::Base, QColor(0, 16, 20));
+    swampPalette.setColor(QPalette::AlternateBase, QColor(66, 66, 66));
+    swampPalette.setColor(QPalette::ToolTipBase, Qt::white);
+    swampPalette.setColor(QPalette::ToolTipText, Qt::white);
+    swampPalette.setColor(QPalette::Text, Qt::white);
+    swampPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+    swampPalette.setColor(QPalette::ButtonText, Qt::white);
+    swampPalette.setColor(QPalette::BrightText, Qt::red);
+    swampPalette.setColor(QPalette::Link, QColor(42, 130, 218));
+    swampPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    swampPalette.setColor(QPalette::HighlightedText, Qt::black);
+
+    if (theme == "System Theme") {
+        QApplication::setPalette(QPalette());
+    } else if (theme == "Light") {
+        QApplication::setPalette(lightPalette);
+    } else if (theme == "Dark") {
+        QApplication::setPalette(darkPalette);
+    } else if (theme == "Dark Purple") {
+        QApplication::setPalette(darkPurplePalette);
+    } else if (theme == "Swamp") {
+        QApplication::setPalette(swampPalette);
+    }
+
+    QString style = "QMenu::item { padding:2px 20px 2px 20px; border:1px solid transparent; }"
+                    "QMenu::item:selected { border-color:rgba(168, 201, 233, 170); background:rgba(111, 183, 255, 170); }"
+                    "QMenu::separator { height:2px; background:palette(base); margin-left:5px; margin-right:5px; }"
+                    "QMenu::icon:checked { background-color:qlineargradient(x1:0,y1:1,x2:0,y2:0,stop:0 rgba(25,25,25,127),stop:1 rgba(53,53,53,75));"
+                    "border:1px solid palette(highlight);border-radius:2px; }";
+
+    fileMenu->setStyleSheet(style);
+    editMenu->setStyleSheet(style);
+    viewMenu->setStyleSheet(style);
 }
 
 void MainWindow::openPrefs() {
@@ -159,8 +254,11 @@ void MainWindow::openPrefs() {
     if (result == PreferencesDialog::Accepted) {
         prefs = pDialog.prefs;
 
+        setTheme(prefs.m_theme);
+
         savePrefs();
 
+        segmentWidget->setRootDir(prefs.m_rootDir);
         segmentWidget->setFov(prefs.m_fov);
         segmentWidget->setSens(prefs.m_sensitivity);
     }

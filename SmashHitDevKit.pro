@@ -1,6 +1,6 @@
 QT       += core gui 3dcore 3drender 3dinput 3dextras openglwidgets opengl xml
 
-LIBS += -lopengl32 -lglu32
+LIBS += -lopengl32 -lglu32 -lz
 
 INCLUDEPATH += "C:\GLM\glm-1.0.1-light" # Change this to your GLM directory if needed
 
@@ -30,6 +30,7 @@ HEADERS += \
     RoomLoader.h \
     SegmentLoader.h \
     SegmentWidget.h \
+    TextureExtractor.h \
     TextureLoader.h \
     Views2D.h
 

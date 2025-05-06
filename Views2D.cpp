@@ -9,8 +9,8 @@ bool contains(const T& container, const U& value) {
     return std::find(container->begin(), container->end(), value) != container->end();
 }
 
-BaseViewWidget::BaseViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects)
-    : QWidget(parent), m_rects(rects), m_selectedRects(selectedRects), m_lastMousePos(0, 0) {
+BaseViewWidget::BaseViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects, ViewOption *option)
+    : QWidget(parent), m_rects(rects), m_selectedRects(selectedRects), m_lastMousePos(0, 0), m_option(option) {
     setMouseTracking(true);
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
@@ -42,7 +42,7 @@ void BaseViewWidget::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    qDebug() << m_offset;
+    //qDebug() << m_offset;
 
     // Apply your current zoom and offset
     painter.translate(m_offset);
@@ -64,7 +64,7 @@ void BaseViewWidget::paintEvent(QPaintEvent *event) {
         height + 2 * expandY
     );
 
-    qDebug() << m_scale;
+    //qDebug() << m_scale;
 
     if (m_scale <= 0.05) gridSize = 1000;
     else if (m_scale <= 0.01) gridSize = 10000;
@@ -141,8 +141,6 @@ void BaseViewWidget::paintEvent(QPaintEvent *event) {
 
         painter.setPen(rectPen);
 
-        qDebug() << "Is cosmetic?" << rectPen.isCosmetic();
-
         painter.drawRect(scaled);
         painter.drawLine(scaled.center() - QPointF(xOff, xOff), scaled.center() + QPointF(xOff, xOff));
         painter.drawLine(scaled.center() - QPointF(-xOff, xOff), scaled.center() + QPointF(-xOff, xOff));
@@ -151,7 +149,7 @@ void BaseViewWidget::paintEvent(QPaintEvent *event) {
     // Draw selection rectangle if active
     if (m_isSelecting) {
         painter.setPen(QPen(Qt::yellow, 1, Qt::DashLine));
-        qDebug() << painter.pen().isCosmetic();
+        painter.pen();
         painter.setBrush(QColor(150, 150, 150, 150));  // Semi-transparent fill
 
         auto snapToGrid = [gridSize](const QPointF& point) {
@@ -173,6 +171,8 @@ void BaseViewWidget::paintEvent(QPaintEvent *event) {
 void BaseViewWidget::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
 
+        bool foundCube = false;
+
         for (Rect3D& rect : *m_rects) {
 
             QRectF rectF = getRect(rect);
@@ -190,21 +190,29 @@ void BaseViewWidget::mousePressEvent(QMouseEvent *event) {
 
             QRectF XRect = QRectF(scaled.center() - QPointF(xOff, xOff), scaled.center() + QPointF(xOff, xOff));
 
-            qDebug() << "XRect:" << XRect;
-            qDebug() << "Mouse pos:" << mapToWorld(event->pos());
+            //qDebug() << "XRect:" << XRect;
+            //qDebug() << "Mouse pos:" << mapToWorld(event->pos());
 
             if (XRect.contains(mapToWorld(event->pos()))) {
                 m_selectedRects->push_back(&rect);
+                foundCube = true;
             }
 
         }
 
-        // Transform mouse position to world space (considering zoom)
         QPointF worldPos = mapToWorld(event->pos());
 
         m_selectionStart = worldPos;  // Store in world coordinates
-        m_selectionEnd = worldPos;    // Initialize selection at the start
-        m_isSelecting = true;
+
+        if (!foundCube) {
+
+            // Transform mouse position to world space (considering zoom)
+            m_selectionEnd = worldPos;    // Initialize selection at the start
+            m_isSelecting = true;
+
+        } else {
+            m_isMoving = true;
+        }
         update();  // Trigger repaint
 
 
@@ -221,6 +229,10 @@ void BaseViewWidget::mouseMoveEvent(QMouseEvent *event) {
         m_selectionEnd = worldPos;  // Update selection to the current position
         update();  // Trigger repaint
     }
+
+    moveCubes(event->pos());
+    update();
+
 }
 
 void BaseViewWidget::mouseReleaseEvent(QMouseEvent *event) {
@@ -235,6 +247,10 @@ void BaseViewWidget::mouseReleaseEvent(QMouseEvent *event) {
         // Calculate the selection rectangle based on normalized positions
         QRectF selectedRect = QRectF(m_selectionStart, m_selectionEnd).normalized();
         qDebug() << "Selected area:" << selectedRect;
+    }
+
+    if (event->button() == Qt::LeftButton) {
+        m_isMoving = false;
     }
 }
 
@@ -279,13 +295,14 @@ void BaseViewWidget::wheelEvent(QWheelEvent *event) {
 }
 
 // Constructors for derived classes
-XYViewWidget::XYViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects)
+XYViewWidget::XYViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects, ViewOption *option)
     : BaseViewWidget(parent) {
     // Custom initialization for the XY view
     setWindowTitle("XY View");
 
     m_rects = rects;
     m_selectedRects = selectedRects;
+    m_option = option;
 }
 
 QRectF XYViewWidget::getRect(Rect3D& rect) {
@@ -308,13 +325,33 @@ void XYViewWidget::drawViewText(QPainter& painter) {
     painter.end();
 }
 
-YZViewWidget::YZViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects)
+void XYViewWidget::moveCubes(QPoint pos) {
+    if (!m_selectedRects->empty() && m_isMoving) {
+        QPointF worldPos = mapToWorld(pos);
+
+        QPointF newPos = worldPos - m_selectionStart;
+
+        for (Rect3D* cube : *m_selectedRects) {
+            auto it = std::find(m_rects->begin(), m_rects->end(), *cube);
+            if (it != m_rects->end()) {
+                QVector3D newCubePos;
+                float z = it->position().z();
+                newCubePos = it->position() + QVector3D(newPos.x(), newPos.y(), z);
+                it->setPosition(newCubePos);
+            }
+        }
+
+    }
+}
+
+YZViewWidget::YZViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects, ViewOption *option)
     : BaseViewWidget(parent) {
     // Custom initialization for the YZ view
     setWindowTitle("YZ View");
 
     m_rects = rects;
     m_selectedRects = selectedRects;
+    m_option = option;
 }
 
 QRectF YZViewWidget::getRect(Rect3D& rect) {
@@ -341,13 +378,33 @@ void YZViewWidget::drawViewText(QPainter& painter) {
     painter.end();
 }
 
-XZViewWidget::XZViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects)
+void YZViewWidget::moveCubes(QPoint pos) {
+    if (!m_selectedRects->empty() && m_isMoving) {
+        QPointF worldPos = mapToWorld(pos);
+
+        QPointF newPos = worldPos - m_selectionStart;
+
+        for (Rect3D* cube : *m_selectedRects) {
+            auto it = std::find(m_rects->begin(), m_rects->end(), *cube);
+            if (it != m_rects->end()) {
+                QVector3D newCubePos;
+                float x = it->position().x();
+                newCubePos = it->position() + QVector3D(x, newPos.x(), newPos.y());
+                it->setPosition(newCubePos);
+            }
+        }
+
+    }
+}
+
+XZViewWidget::XZViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects, ViewOption *option)
     : BaseViewWidget(parent) {
     // Custom initialization for the XZ view
     setWindowTitle("XZ View");
 
     m_rects = rects;
     m_selectedRects = selectedRects;
+    m_option = option;
 }
 
 QRectF XZViewWidget::getRect(Rect3D& rect) {
@@ -372,4 +429,21 @@ void XZViewWidget::drawViewText(QPainter& painter) {
 
     // End the painting operation
     painter.end();
+}
+
+void XZViewWidget::moveCubes(QPoint pos) {
+    if (!m_selectedRects->empty() && m_isMoving) {
+        QPointF worldPos = pos;
+        QPointF newPos = m_selectionStart - worldPos;
+
+        m_selectionStart = newPos;
+
+        newPos *= 0.0001f;
+
+        for (Rect3D* cube : *m_selectedRects) {
+            QVector3D current = cube->position();
+            QVector3D newCubePos = current + QVector3D(newPos.x(), 0.0f, newPos.y());
+            cube->setPosition(newCubePos);
+        }
+    }
 }

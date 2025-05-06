@@ -9,7 +9,7 @@ class BaseViewWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit BaseViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr);
+    explicit BaseViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr, ViewOption *option = nullptr);
 
     QWidget *container;
     int selectedIndex;
@@ -35,21 +35,26 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void showContextMenu(const QPoint &pos);
+    QPointF mapToWorld(const QPointF& widgetPos);
 
     std::vector<Rect3D> *m_rects;
     std::vector<Rect3D*> *m_selectedRects;
+    ViewOption *m_option;
+
+    QPointF m_selectionStart;
+    QPointF m_selectionEnd;
+    bool m_isMoving;
 
 private:
     float xOff;
     QPoint m_lastMousePos;
-    QPointF m_selectionStart;
-    QPointF m_selectionEnd;
+
     bool m_isSelecting = false;
     float m_scale = 1.0f;            // Zoom factor
     QPointF m_offset = QPointF(0, 0); // Pan / translation offset
 
     virtual void drawViewText(QPainter& painter) = 0;
-    QPointF mapToWorld(const QPointF& widgetPos);
+    virtual void moveCubes(QPoint pos) = 0;
 
     int m_worldMinX = -100000;  // Arbitrary world limits
     int m_worldMaxX =  100000;
@@ -61,36 +66,36 @@ class XYViewWidget : public BaseViewWidget {
     Q_OBJECT
 
 public:
-    explicit XYViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr);
+    explicit XYViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr, ViewOption *option = nullptr);
     QRectF getRect(Rect3D& rect) override;
 
 private:
     void drawViewText(QPainter& painter) override;
-
+    void moveCubes(QPoint pos) override;
 };
 
 class YZViewWidget : public BaseViewWidget {
     Q_OBJECT
 
 public:
-    explicit YZViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr);
+    explicit YZViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr, ViewOption *option = nullptr);
     QRectF getRect(Rect3D& rect) override;
 
 private:
     void drawViewText(QPainter& painter) override;
-
+    void moveCubes(QPoint pos) override;
 };
 
 class XZViewWidget : public BaseViewWidget {
     Q_OBJECT
 
 public:
-    explicit XZViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr);
+    explicit XZViewWidget(QWidget *parent = nullptr, std::vector<Rect3D> *rects = nullptr, std::vector<Rect3D*> *selectedRects = nullptr, ViewOption *option = nullptr);
     QRectF getRect(Rect3D& rect) override;
 
 private:
     void drawViewText(QPainter& painter) override;
-
+    void moveCubes(QPoint pos) override;
 };
 
 #endif // VIEWS2D_H

@@ -6,6 +6,12 @@
 #include <GL/gl.h>
 #include <QOpenGLFunctions>
 
+enum ViewOption {
+    Select,
+    Cube,
+    Entity
+};
+
 class Rect3D {
 public:
     // Constructor to initialize the position and size of the 3D rectangle
@@ -81,7 +87,7 @@ public:
 private:
     QVector3D m_position;  // Position in 3D space (x, y, z)
     QVector3D m_size;      // Size (width, height, depth) in 3D space
-    std::array<GLfloat, 3> m_colour = {1.0f, 1.0f, 0.0f};
+    std::array<GLfloat, 3> m_colour = {1.0f, 1.0f, 1.0f};
 };
 
 #endif // RECT3D_H
