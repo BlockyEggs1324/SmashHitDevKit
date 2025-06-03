@@ -29,15 +29,17 @@ SegmentWidget::SegmentWidget(QWidget *parent, std::vector<Rect3D> *rects, std::v
     timer->start(4); // ~250 FPS (1000ms / 250 ≈ 4ms)
 
     if (m_rects != nullptr) {
-        m_rects->push_back(Rect3D(10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f));
+        m_rects->push_back(Rect3D(0.0f, 0.0f, 0.0f, 10.0f, 10.0f, 10.0f));
     }
 
     m_glToggle = true;
     m_cameraFov = 70.0f;
 
+    //m_roomProgram = createShaderProgram("room");
+
 }
 
-GLuint SegmentWidget::loadTexture(QString filename) {
+QOpenGLTexture* SegmentWidget::loadTexture(QString filename) {
     QImage image(filename);
 
     qDebug() << "Loaded texture from image:" << filename;
@@ -48,29 +50,30 @@ GLuint SegmentWidget::loadTexture(QString filename) {
         qWarning() << "OpenGL context is valid.";
     }
 
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    int tile = 25;
 
-    // set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    int tilesPerRow = 8;
+    int tileWidth = 128;
+    int tileHeight = 128;
 
-    // load image
-    int width = image.width();
-    int height = image.height();
-    int nrChannels = image.hasAlphaChannel() ? 4 : 3;  // Check for alpha channel
-    const unsigned char *data = image.constBits();
-    tileData = data;
+    int col = tile % tilesPerRow;
 
-    if (data) {
-        glTexImage2D(GL_TEXTURE_2D, 0, nrChannels == 4 ? GL_RGBA : GL_RGB, width, height, 0, nrChannels == 4 ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE, data);
-        //glGenerateMipmap(GL_TEXTURE_2D);
+    int row = tile / tilesPerRow;
+
+    QRect tileRect(col * tileWidth, row * tileHeight, 64, 64);
+
+    QImage newTile = image.copy(tileRect);
+
+    if (newTile.isNull()) {
+        qWarning() << "Failed to copy tile from image:" << filename;
+        return nullptr;
     }
 
-    return texture;
+    tileTex = new QOpenGLTexture(newTile.mirrored());
+
+    tileTex->setMinificationFilter(QOpenGLTexture::Nearest);
+
+    return tileTex;
 
 }
 
@@ -78,11 +81,7 @@ void SegmentWidget::loadTileTexture() {
 
     if (!QFile("tiles.jpg").exists()) extractMTXFile(m_rootDir + "/gfx/tiles.png.mtx");
 
-    m_tileTexture = loadTexture("tiles.jpg");
-
-    if (m_tileTexture == 0) {
-        qWarning() << "Failed to load texture!";
-    }
+    tileTex = loadTexture("tiles.jpg");
 
 }
 
@@ -93,7 +92,8 @@ void SegmentWidget::setRootDir(QString rootDir) {
 void SegmentWidget::setFov(int value) {
     m_cameraFov = value;
 
-    //resizeGL(rect().width(), rect().height());
+    if (context()) resizeGL(width(), height());
+
 }
 
 void SegmentWidget::setSens(float value) {
@@ -110,9 +110,13 @@ void SegmentWidget::initializeGL() {
     glClearDepth(1.0);
     glDepthMask(GL_TRUE); // Ensure depth writing
 
-    m_roomShader = createShaderProgram("room.vert", "room.frag");
-    m_clearShader = createShaderProgram("clear.vert", "clear.frag");
-    m_basicShader = createShaderProgram("basic.vert", "basic.frag");
+    qDebug() << "Loading room program!";
+
+    m_roomProgram = createShaderProgram("room");
+
+    qDebug() << "Loading clear program!";
+    m_clearProgram = createShaderProgram("clear");
+    m_basicProgram = createShaderProgram("basic");
 
     loadTileTexture();
 }
@@ -191,114 +195,81 @@ void SegmentWidget::paintGL() {
         else m_model.translate(-m_cameraPosition.x(), -m_cameraPosition.y(), -m_cameraPosition.z());
 
         //model.rotate(m_cameraYaw)
-        m_model.scale(1.0f, 1.0f, 1.0f);
+        //m_model.scale(1.0f, 1.0f, 1.0f);
 
         //getCameraFront()
 
         // Setup uniforms:
         QMatrix4x4 mvp = getMVP(m_model);
 
-        glUseProgram(m_clearShader);
+        // === Render Fog (Clear Pass) ===
+        m_clearProgram->bind();
+        m_clearProgram->setUniformValue("uMvpMatrix", mvp);
+        m_clearProgram->setUniformValue("uLowerFog", QVector4D(lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]));
+        m_clearProgram->setUniformValue("uUpperFog", QVector4D(upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]));
 
-        glUniformMatrix4fv(glGetUniformLocation(m_clearShader, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
-
-        glUniform4f(glGetUniformLocation(m_clearShader, "uLowerFog"), lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]); // your lower fog color
-        glUniform4f(glGetUniformLocation(m_clearShader, "uUpperFog"), upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]); // your upper fog color
-
-        // Disable depth testing while rendering fog
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
-        // Fullscreen quad in NDC (Normalized Device Coordinates)
-        float fullscreenQuad[] = {
-            -1.0f, -1.0f,
-            1.0f, -1.0f,
-            1.0f,  1.0f,
-            -1.0f,  1.0f
-        };
-
+        // Fullscreen quad setup
+        float fullscreenQuad[] = { -1.f, -1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f };
         GLuint vbo;
-        glGenBuffers(1, &vbo);  // Generate buffer
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);  // Bind the buffer
-        glBufferData(GL_ARRAY_BUFFER, sizeof(fullscreenQuad), fullscreenQuad, GL_STATIC_DRAW);  // Upload data to GPU
+        glGenBuffers(1, &vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(fullscreenQuad), fullscreenQuad, GL_STATIC_DRAW);
 
-        GLint posAttrib = glGetAttribLocation(m_clearShader, "aPosition");
+        int posAttrib = m_clearProgram->attributeLocation("aPosition");
         glEnableVertexAttribArray(posAttrib);
-        glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+        glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-        // Draw fullscreen quad
         glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-        // Cleanup
         glDisableVertexAttribArray(posAttrib);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);  // Unbind buffer
-        glDeleteBuffers(1, &vbo);  // Delete buffer
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glDeleteBuffers(1, &vbo);
 
-        // Restore state
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_TEXTURE_2D);
         glDepthMask(GL_TRUE);
 
-        // Create a single white pixel
-        uint8_t whitePixel[] = { 255, 255, 255, 255 };
+        // === Basic Pass ===
+        m_basicProgram->bind();
 
-        glUseProgram(m_basicShader);
+        QVector2D texCoords[] = {
+            QVector2D(0.0f, 0.0f), // bottom-left
+            QVector2D(1.0f, 0.0f), // bottom-right
+            QVector2D(0.0f, 1.0f), // top-left
+            QVector2D(1.0f, 1.0f)  // top-right
+        };
 
-        glUniformMatrix4fv(glGetUniformLocation(m_basicShader, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
+        int texCoordLocation = m_basicProgram->attributeLocation("aTexCoord");
+        m_basicProgram->enableAttributeArray(texCoordLocation);
+        m_basicProgram->setAttributeArray(texCoordLocation, GL_FLOAT, texCoords, 2);
 
-        glUniform4f(glGetUniformLocation(m_basicShader, "uColor"), whitePixel[0], whitePixel[1], whitePixel[2], whitePixel[3]);
+        QVector4D color = QVector4D(1.0, 0.0, 1.0, 1.0);
 
-        glUniform4f(glGetUniformLocation(m_basicShader, "uLowerFog"), lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]); // your lower fog color
-        glUniform4f(glGetUniformLocation(m_basicShader, "uUpperFog"), upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]); // your upper fog color
+        int colorLoc = m_basicProgram->attributeLocation("aColor");
+        m_basicProgram->enableAttributeArray(colorLoc);
+        m_basicProgram->setAttributeArray(colorLoc, &color);
 
-        auto colour = m_rects->at(0).getColour();
+        QVector3D vertices[] = {
+            {-1, -1, 0}, {1, -1, 0}, {-1, 1, 0}, {1, 1, 1}
+        };
 
-        glUniform4f(glGetUniformLocation(m_basicShader, "uColor"), colour[0], colour[1], colour[2], colour[3]);
+        int posLoc = m_basicProgram->attributeLocation("aPosition");
+        m_basicProgram->enableAttributeArray(posLoc);
+        m_basicProgram->setAttributeArray(posLoc, GL_FLOAT, vertices, 3);
 
-        glGenTextures(1, &m_tileTexture);
-        glBindTexture(GL_TEXTURE_2D, m_tileTexture);
+        // === Room Pass ===
+        //m_roomProgram->bind();
 
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, tileData);
+        //tileTex->bind();
 
-        // Set texture parameters
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        // Bind your texture to texture unit 0
-        glActiveTexture(GL_TEXTURE0);  // Ensure texture unit 0 is active
-        glBindTexture(GL_TEXTURE_2D, m_tileTexture);
-        if (m_tileTexture == 0) {
-            qWarning() << "Texture is not bound properly!";
-        }
-        glUniform1i(glGetUniformLocation(m_basicShader, "uTexture0"), 0);
-
-        glUseProgram(m_roomShader);
-
-        //loadTileTexture();
-
-        glUniformMatrix4fv(glGetUniformLocation(m_roomShader, "uMvpMatrix"), 1, GL_FALSE, mvp.constData());
-
-        glUniform4f(glGetUniformLocation(m_roomShader, "uColor"), whitePixel[0], whitePixel[1], whitePixel[2], whitePixel[3]);
-
-        glUniform4f(glGetUniformLocation(m_roomShader, "uLowerFog"), lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]); // your lower fog color
-        glUniform4f(glGetUniformLocation(m_roomShader, "uUpperFog"), upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]); // your upper fog color
-
-        //GLuint yourTextureID;
-        glGenTextures(1, &m_tileTexture);
-        glBindTexture(GL_TEXTURE_2D, m_tileTexture);
-
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, tileData);
-
-        // Set texture parameters
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        // Bind your texture to texture unit 0
-        glActiveTexture(GL_TEXTURE0);  // Ensure texture unit 0 is active
-        glBindTexture(GL_TEXTURE_2D, m_tileTexture);
-        if (m_tileTexture == 0) {
-            qWarning() << "Texture is not bound properly!";
-        }
-        glUniform1i(glGetUniformLocation(m_roomShader, "uTexture0"), 0);
+        //m_roomProgram->setUniformValue("uMvpMatrix", mvp);
+        //m_roomProgram->setUniformValue("uColor", QVector4D(1, 1, 1, 1)); // White
+        //m_roomProgram->setUniformValue("uLowerFog", QVector4D(lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]));
+        //m_roomProgram->setUniformValue("uUpperFog", QVector4D(upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]));
+        //m_roomProgram->setUniformValue("uTexture0", 0);
 
     } else {
         if (m_gameView) {
@@ -315,11 +286,23 @@ void SegmentWidget::paintGL() {
         }
     }
 
+
+
+    m_model = QMatrix4x4();
+
+    m_model.translate(-m_cameraPosition.x(), -m_cameraPosition.y(), -m_cameraPosition.z());
+    m_model.rotate(-m_cameraPitch, 1.0f, 0.0f, 0.0f);
+    m_model.rotate(-m_cameraPitch, 1.0f, 0.0f, 0.0f);
+
+    QMatrix4x4 mvp = getMVP(m_model);
+
     if (m_drawFaces) {
         // Draw filled cubes
         for (const Rect3D& cube : *m_rects) {
             bool isSelected = contains(m_selectedRects, &cube); // Check if the pointer to cube is in the selected rects
-            drawCubeNew(cube, isSelected); // Draw filled cubes, depending on whether selected
+            if (m_useShader) drawCubeNew(cube, isSelected); // Draw filled cubes, depending on whether selected
+            else drawCube(cube, isSelected);
+
             if (isSelected) {
                 drawCubeOutline(cube);
             }
@@ -390,12 +373,12 @@ void SegmentWidget::handleInput() {
     if (m_gameView) {
         if (m_pressedKeys.contains(Qt::Key_W)) {
             m_gameViewPosition += m_cameraSpeed;  // Move forward
-            qDebug() << "Moving to" << m_gameViewPosition;
+            //qDebug() << "Moving to" << m_gameViewPosition;
         }
 
         if (m_pressedKeys.contains(Qt::Key_S)) {
             m_gameViewPosition -= m_cameraSpeed;  // Move backwards
-            qDebug() << "Moving to" << m_gameViewPosition;
+            //qDebug() << "Moving to" << m_gameViewPosition;
         }
     } else {
 
@@ -655,6 +638,42 @@ QVector3D unprojectRay(const QMatrix4x4 &viewMatrix,
     return ray.toVector3D().normalized();
 }
 
+void DeprojectScreenToWorld(
+    const glm::vec2& screenPos,
+    const glm::ivec4& viewRect, // x, y, width, height
+    const glm::mat4& invViewProjMatrix,
+    glm::vec3& outWorldOrigin,
+    glm::vec3& outWorldDirection)
+{
+    float pixelX = std::floor(screenPos.x);
+    float pixelY = std::floor(screenPos.y);
+
+    // Normalize to [0, 1] range in viewport
+    float normalizedX = (pixelX - viewRect.x) / static_cast<float>(viewRect.z);
+    float normalizedY = (pixelY - viewRect.y) / static_cast<float>(viewRect.w);
+
+    // Convert to clip space (-1 to 1)
+    float clipX = (normalizedX - 0.5f) * 2.0f;
+    float clipY = ((1.0f - normalizedY) - 0.5f) * 2.0f;
+
+    glm::vec4 rayStartNDC(clipX, clipY, 1.0f, 1.0f);
+    glm::vec4 rayEndNDC(clipX, clipY, 0.01f, 1.0f);
+
+    glm::vec4 rayStartWorld = invViewProjMatrix * rayStartNDC;
+    glm::vec4 rayEndWorld = invViewProjMatrix * rayEndNDC;
+
+    if (rayStartWorld.w != 0.0f) rayStartWorld /= rayStartWorld.w;
+    if (rayEndWorld.w != 0.0f) rayEndWorld /= rayEndWorld.w;
+
+    glm::vec3 rayStart(rayStartWorld);
+    glm::vec3 rayEnd(rayEndWorld);
+
+    glm::vec3 rayDir = glm::normalize(rayEnd - rayStart);
+
+    outWorldOrigin = rayStart;
+    outWorldDirection = rayDir;
+}
+
 void SegmentWidget::selectCube(const QPoint& mousePos) {
 
     float x = (2.0f * mousePos.x()) / width() - 1.0f;
@@ -664,7 +683,7 @@ void SegmentWidget::selectCube(const QPoint& mousePos) {
     glm::vec4 rayEye = glm::inverse(projectionMatrix) * rayClip;
     rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
 
-    viewMatrix = getViewMatrix();
+    viewMatrix = toMat4(getMVP(m_model));
 
     glm::vec4 rayWorld = glm::inverse(viewMatrix) * rayEye;
     glm::vec3 rayDir = glm::normalize(glm::vec3(rayWorld));
@@ -681,11 +700,36 @@ void SegmentWidget::selectCube(const QPoint& mousePos) {
 
     QVector3D rayDire = unprojectRay(vm, pm, width(), height(), mousePos);
 
+    glm::vec4 viewport = {0, 0, width(), height()};
+    glm::vec3 pos = glm::unProject({mousePos.x(), height()-mousePos.y(), 1}, toMat4(getMVP(m_model)), projectionMatrix, viewport);
+
+
+    m_debugRayEnd = cameraPos + pos * 100.0f;
+
     //rayDir = toVec3(rayDire);
 
-    m_debugRayEnd = cameraPos + rayDir * 100.0f;
+    //m_debugRayEnd = cameraPos + rayDir * 100.0f;
 
-    m_debugRayDir = rayDir;
+    //m_debugRayDir = rayDir;
+
+    const glm::vec2 screenPos(mousePos.x(), height() - mousePos.y());
+    const glm::ivec4 view(0, 0, width(), height());
+    //DeprojectScreenToWorld(screenPos, view, glm::inverse(projectionMatrix * viewMatrix), cameraPos, m_debugRayDir);
+
+    //glm::vec4 viewport(0, 0, width(), height());
+
+    glm::vec3 rayStartNDC = glm::unProject(glm::vec3(screenPos, 0.1f), viewMatrix, projectionMatrix, viewport); // Near plane
+    glm::vec3 rayEndNDC   = glm::unProject(glm::vec3(screenPos, 1000.0f), viewMatrix, projectionMatrix, viewport); // Far plane
+
+    // Create ray
+    glm::vec3 rayOrigin = rayStartNDC;
+    glm::vec3 rayDirection = glm::normalize(rayEndNDC - rayStartNDC);
+
+    //m_debugRayStart = rayOrigin * 2.0f;
+    m_debugRayDir = rayDirection;
+    //m_debugRayEnd = rayOrigin + rayDirection * 100.0f;
+
+    //glm::unProject(glm::vec3(screenPos, 0.2f), m_model, projectionMatrix, viewport);
 
     /*
 
@@ -815,7 +859,14 @@ void SegmentWidget::keyPressEvent(QKeyEvent *event) {
 
     }
     if (event->key() == Qt::Key_F8) {
-        m_gameViewPosition = 0.0f;
+        if (m_gameView) {
+            m_gameViewPosition = 0.0f;
+        } else {
+            m_cameraPosition = QVector3D(0.0f, 0.0f, 0.0f);
+            m_cameraYaw = 0.0f;
+            m_cameraPitch = 0.0f;
+        }
+        
     }
 }
 
@@ -889,56 +940,19 @@ void SegmentWidget::mouseMoveEvent(QMouseEvent *event) {
     }
 }
 
-GLuint SegmentWidget::loadShaderFromFile(const QString& path, GLenum type) {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qDebug() << "Shader file not found:" << path;
-        return 0;
-    }
+QOpenGLShaderProgram *SegmentWidget::createShaderProgram(const QString& path) {
 
-    QByteArray shaderSource = file.readAll();
-    const char* src = shaderSource.constData();
+    QOpenGLShaderProgram *program = new QOpenGLShaderProgram();
 
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, nullptr);
-    glCompileShader(shader);
+    if (!program->addShaderFromSourceFile(QOpenGLShader::Vertex, path + ".vert"))
+        qWarning() << "Vertex shader failed:" << program->log();
 
-    GLint compiled;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-    if (!compiled) {
-        char log[512];
-        glGetShaderInfoLog(shader, 512, nullptr, log);
-        qDebug() << "Shader compile error:" << log;
-        glDeleteShader(shader);
-        m_useShader = false;
-        return 0;
-    }
-    return shader;
-}
+    if (!program->addShaderFromSourceFile(QOpenGLShader::Fragment, path + ".frag"))
+        qWarning() << "Fragment shader failed:" << program->log();
 
-GLuint SegmentWidget::createShaderProgram(const QString& vertexPath, const QString& fragmentPath) {
-    GLuint vertexShader = loadShaderFromFile(vertexPath, GL_VERTEX_SHADER);
-    GLuint fragmentShader = loadShaderFromFile(fragmentPath, GL_FRAGMENT_SHADER);
-    if (!vertexShader || !fragmentShader) return 0;
+    if (!program->link())
+        qWarning() << "Shader linking failed:" << program->log();
 
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    GLint linked;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
-    if (!linked) {
-        char log[512];
-        glGetProgramInfoLog(program, 512, nullptr, log);
-        qDebug() << "Shader link error:" << log;
-        glDeleteProgram(program);
-        m_useShader = false;
-        return 0;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
     return program;
 }
 
@@ -960,54 +974,78 @@ void SegmentWidget::drawCubeNew(const Rect3D& rect, bool selected) {
     // Each face has 6 vertices (2 triangles) with position, color, and texture coordinates
     // Winding order is COUNTER-CLOCKWISE when viewed from outside
     GLfloat vertices[] = {
-        // Front face (p1, p2, p3, p1, p3, p4) - Z-
-        p1.x, p1.y, p1.z, 1, 0, 0, 0.0f, 0.0f,
-        p2.x, p2.y, p2.z, 0, 1, 0, 1.0f, 0.0f,
-        p3.x, p3.y, p3.z, 0, 0, 1, 1.0f, 1.0f,
-        p1.x, p1.y, p1.z, 1, 0, 0, 0.0f, 0.0f,
-        p3.x, p3.y, p3.z, 0, 0, 1, 1.0f, 1.0f,
-        p4.x, p4.y, p4.z, 1, 1, 0, 0.0f, 1.0f,
 
-        // Back face (p6, p5, p7, p5, p8, p7) - Z+
-        p6.x, p6.y, p6.z, 1, 0, 1, 0.0f, 0.0f,
-        p5.x, p5.y, p5.z, 0, 1, 1, 1.0f, 0.0f,
-        p7.x, p7.y, p7.z, 1, 1, 1, 1.0f, 1.0f,
-        p5.x, p5.y, p5.z, 0, 1, 1, 1.0f, 0.0f,
-        p8.x, p8.y, p8.z, 0.5f, 0.5f, 0.5f, 0.0f, 1.0f,
-        p7.x, p7.y, p7.z, 1, 1, 1, 1.0f, 1.0f,
+    // Front face (p1, p2, p3, p1, p3, p4) - Z-
+    p1.x, p1.y, p1.z,  0.0f, 0.0f,
+    p2.x, p2.y, p2.z,  1.0f, 0.0f,
+    p3.x, p3.y, p3.z,  1.0f, 1.0f,
+    p1.x, p1.y, p1.z,  0.0f, 0.0f,
+    p3.x, p3.y, p3.z,  1.0f, 1.0f,
+    p4.x, p4.y, p4.z,  0.0f, 1.0f,
 
-        // Left face (p5, p1, p4, p5, p4, p8) - X-
-        p5.x, p5.y, p5.z, 1, 0, 0, 0.0f, 0.0f,
-        p1.x, p1.y, p1.z, 0, 1, 0, 1.0f, 0.0f,
-        p4.x, p4.y, p4.z, 0, 0, 1, 1.0f, 1.0f,
-        p5.x, p5.y, p5.z, 1, 0, 0, 0.0f, 0.0f,
-        p4.x, p4.y, p4.z, 0, 0, 1, 1.0f, 1.0f,
-        p8.x, p8.y, p8.z, 1, 1, 0, 0.0f, 1.0f,
+    // Back face (p6, p5, p8, p6, p8, p7) - Z+
+    p6.x, p6.y, p6.z,  0.0f, 0.0f,
+    p5.x, p5.y, p5.z,  1.0f, 0.0f,
+    p8.x, p8.y, p8.z,  1.0f, 1.0f,
+    p6.x, p6.y, p6.z,  0.0f, 0.0f,
+    p8.x, p8.y, p8.z,  1.0f, 1.0f,
+    p7.x, p7.y, p7.z,  0.0f, 1.0f,
 
-        // Right face (p2, p6, p7, p2, p7, p3) - X+
-        p2.x, p2.y, p2.z, 1, 0, 1, 0.0f, 0.0f,
-        p6.x, p6.y, p6.z, 0, 1, 1, 1.0f, 0.0f,
-        p7.x, p7.y, p7.z, 1, 1, 1, 1.0f, 1.0f,
-        p2.x, p2.y, p2.z, 1, 0, 1, 0.0f, 0.0f,
-        p7.x, p7.y, p7.z, 1, 1, 1, 1.0f, 1.0f,
-        p3.x, p3.y, p3.z, 0.5f, 0.5f, 0.5f, 0.0f, 1.0f,
+    // Left face (p5, p1, p4, p5, p4, p8) - X-
+    p5.x, p5.y, p5.z,  0.0f, 0.0f,
+    p1.x, p1.y, p1.z,  1.0f, 0.0f,
+    p4.x, p4.y, p4.z,  1.0f, 1.0f,
+    p5.x, p5.y, p5.z,  0.0f, 0.0f,
+    p4.x, p4.y, p4.z,  1.0f, 1.0f,
+    p8.x, p8.y, p8.z,  0.0f, 1.0f,
 
-        // Top face (p4, p3, p7, p4, p7, p8) - Y+
-        p4.x, p4.y, p4.z, 1, 0, 0, 0.0f, 0.0f,
-        p3.x, p3.y, p3.z, 0, 1, 0, 1.0f, 0.0f,
-        p7.x, p7.y, p7.z, 0, 0, 1, 1.0f, 1.0f,
-        p4.x, p4.y, p4.z, 1, 0, 0, 0.0f, 0.0f,
-        p7.x, p7.y, p7.z, 0, 0, 1, 1.0f, 1.0f,
-        p8.x, p8.y, p8.z, 1, 1, 0, 0.0f, 1.0f,
+    // Right face (p2, p6, p7, p2, p7, p3) - X+
+    p2.x, p2.y, p2.z,  0.0f, 0.0f,
+    p6.x, p6.y, p6.z,  1.0f, 0.0f,
+    p7.x, p7.y, p7.z,  1.0f, 1.0f,
+    p2.x, p2.y, p2.z,  0.0f, 0.0f,
+    p7.x, p7.y, p7.z,  1.0f, 1.0f,
+    p3.x, p3.y, p3.z,  0.0f, 1.0f,
 
-        // Bottom face (p1, p5, p6, p1, p6, p2) - Y-
-        p1.x, p1.y, p1.z, 1, 0, 1, 0.0f, 0.0f,
-        p5.x, p5.y, p5.z, 0, 1, 1, 1.0f, 0.0f,
-        p6.x, p6.y, p6.z, 1, 1, 1, 1.0f, 1.0f,
-        p1.x, p1.y, p1.z, 1, 0, 1, 0.0f, 0.0f,
-        p6.x, p6.y, p6.z, 1, 1, 1, 1.0f, 1.0f,
-        p2.x, p2.y, p2.z, 0.5f, 0.5f, 0.5f, 0.0f, 1.0f
+    // Top face (p4, p3, p7, p4, p7, p8) - Y+
+    p4.x, p4.y, p4.z,  0.0f, 0.0f,
+    p3.x, p3.y, p3.z,  1.0f, 0.0f,
+    p7.x, p7.y, p7.z,  1.0f, 1.0f,
+    p4.x, p4.y, p4.z,  0.0f, 0.0f,
+    p7.x, p7.y, p7.z,  1.0f, 1.0f,
+    p8.x, p8.y, p8.z,  0.0f, 1.0f,
+
+    // Bottom face (p1, p5, p6, p1, p6, p2) - Y-
+    p1.x, p1.y, p1.z,  0.0f, 0.0f,
+    p5.x, p5.y, p5.z,  1.0f, 0.0f,
+    p6.x, p6.y, p6.z,  1.0f, 1.0f,
+    p1.x, p1.y, p1.z,  0.0f, 0.0f,
+    p6.x, p6.y, p6.z,  1.0f, 1.0f,
+    p2.x, p2.y, p2.z,  0.0f, 1.0f
+
     };
+
+    m_model = QMatrix4x4();
+
+    if (m_gameView) m_model.translate(0, -1, m_gameViewPosition);
+    else m_model.translate(-m_cameraPosition.x(), -m_cameraPosition.y(), -m_cameraPosition.z());
+        
+    QMatrix4x4 mvp = getMVP(m_model);
+
+    m_basicProgram->setUniformValue("uMvpMatrix", mvp);
+    m_basicProgram->setUniformValue("uLowerFog", QVector4D(lowerFogColour[0], lowerFogColour[1], lowerFogColour[2], lowerFogColour[3]));
+    m_basicProgram->setUniformValue("uUpperFog", QVector4D(upperFogColour[0], upperFogColour[1], upperFogColour[2], upperFogColour[3]));
+    m_basicProgram->setUniformValue("uIsSelected", selected);
+    m_basicProgram->setUniformValue("uTexture0", 0);
+
+    m_basicProgram->setAttributeValue("aColor", rect.getColourVector());
+
+    GLuint color = m_basicProgram->attributeLocation("aColor");
+    GLuint position = m_basicProgram->attributeLocation("aPosition");
+    GLuint texCoord = m_basicProgram->attributeLocation("aTexCoord");
+
+    glActiveTexture(GL_TEXTURE0);
+    tileTex->bind();
 
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
@@ -1018,25 +1056,34 @@ void SegmentWidget::drawCubeNew(const Rect3D& rect, bool selected) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+    //m_basicProgram->enableAttributeArray(color);
+    //m_basicProgram->setAttributeBuffer(color, GL_FLOAT, 0, 4, 5 * sizeof(GLfloat)); // color (now 4 floats)
+    
+    m_basicProgram->enableAttributeArray(position);
+    m_basicProgram->setAttributeBuffer(position, GL_FLOAT, 0, 3, 5 * sizeof(GLfloat)); // position
+    
+    m_basicProgram->enableAttributeArray(texCoord);
+    m_basicProgram->setAttributeBuffer(texCoord, GL_FLOAT, 0, 2, 5 * sizeof(GLfloat)); // texcoord
+
     // Position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
-    glEnableVertexAttribArray(0);
+    //glEnableVertexAttribArray(position);
+    //glVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);           // position
+    
 
     // Color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
-    glEnableVertexAttribArray(1);
+    //glVertexAttribPointer(color, 4, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat))); // color (now 4 floats)
+    //glEnableVertexAttribArray(1);
+
+    //glEnableVertexAttribArray(color);
+    //m_basicProgram->setAttributeValue("aColor", rect.getColourVector());
 
     // Texture coordinate attribute
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
-    glEnableVertexAttribArray(2);
+    //glEnableVertexAttribArray(texCoord);
+    //glVertexAttribPointer(texCoord, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(7 * sizeof(GLfloat))); // texcoord
 
-    // Bind the texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_tileTexture);
-
-    // Enable face culling (optional, but recommended for performance)
     glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT); // Cull back faces (default)
+    glCullFace(GL_FRONT); 
+    glFrontFace(GL_CCW);
 
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36); // 6 faces × 6 vertices = 36 vertices
@@ -1044,6 +1091,7 @@ void SegmentWidget::drawCubeNew(const Rect3D& rect, bool selected) {
     // Cleanup
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
+    
 }
 
 void SegmentWidget::drawCube(const Rect3D& cubeRect, bool selected) {

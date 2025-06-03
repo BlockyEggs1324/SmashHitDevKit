@@ -68,8 +68,6 @@ PreferencesDialog::PreferencesDialog(QWidget *parent, Prefs currentPrefs)
 
     QRect buttonRect(rootDirLabel->geometry().topRight(), QPoint(10, 10));
 
-    //openFolderButton->setGeometry(buttonRect);
-
     connect(openFolderButton, &QPushButton::clicked, this, [this]() {
         QString dir = QFileDialog::getExistingDirectory(this, "Select Folder", prefs.m_rootDir);
         if (!dir.isEmpty()) {

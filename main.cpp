@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <MyOpenGLWidget.h>
 #include <QApplication>
 #include <QStyleFactory>
 
@@ -9,6 +10,8 @@ int main(int argc, char *argv[]) {
     a.setStyle("Fusion");
 
     MainWindow w;
+
+    //MyOpenGLWidget w;
     w.show();
     return a.exec();
 }

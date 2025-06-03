@@ -42,6 +42,10 @@ public:
         return m_colour;
     }
 
+    QVector4D getColourVector() const {
+        return QVector4D(m_colour[0], m_colour[1], m_colour[2], 1.0f);
+    }
+
     // Translate the rectangle (move it in 3D space)
     void translate(const QVector3D& translation) {
         m_position += translation;

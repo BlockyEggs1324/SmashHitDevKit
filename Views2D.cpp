@@ -230,7 +230,8 @@ void BaseViewWidget::mouseMoveEvent(QMouseEvent *event) {
         update();  // Trigger repaint
     }
 
-    moveCubes(event->pos());
+    moveCubes(event->pos());  // This uses m_selectionStart
+    m_selectionStart = mapToWorld(event->pos());  // Update AFTER move
     update();
 
 }
@@ -335,14 +336,15 @@ void XYViewWidget::moveCubes(QPoint pos) {
             auto it = std::find(m_rects->begin(), m_rects->end(), *cube);
             if (it != m_rects->end()) {
                 QVector3D newCubePos;
-                float z = it->position().z();
-                newCubePos = it->position() + QVector3D(newPos.x(), newPos.y(), z);
+                float x = it->position().x();
+                newCubePos = it->position() + QVector3D(x, newPos.x(), newPos.y());
                 it->setPosition(newCubePos);
             }
         }
 
     }
 }
+
 
 YZViewWidget::YZViewWidget(QWidget *parent, std::vector<Rect3D> *rects, std::vector<Rect3D*> *selectedRects, ViewOption *option)
     : BaseViewWidget(parent) {

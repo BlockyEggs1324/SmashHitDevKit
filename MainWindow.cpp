@@ -34,6 +34,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     fileMenu = menuBar()->addMenu("&File");
     editMenu = menuBar()->addMenu("&Edit");
     viewMenu = menuBar()->addMenu("&View");
+    toolsMenu = menuBar()->addMenu("&Tools");
 
     qDebug() << prefs.m_theme;
 
@@ -48,6 +49,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     fileMenu->setStyleSheet(style);
     editMenu->setStyleSheet(style);
     viewMenu->setStyleSheet(style);
+    toolsMenu->setStyleSheet(style);
+
+    QMenu *newMenu = new QMenu("&New", this);
+    newMenu->setStyleSheet(style);
+    fileMenu->addMenu(newMenu);
+
+    QAction *newSegmentAction = new QAction("New &Segment", this);
+    newMenu->addAction(newSegmentAction);
+
+    QAction *newRoomAction = new QAction("New &Room", this);
+    newMenu->addAction(newRoomAction);
+    connect(newRoomAction, &QAction::triggered, this, &MainWindow::newRoom);
+
 
     QMenu *openMenu = new QMenu("&Open", this);
     openMenu->setStyleSheet(style);
@@ -116,6 +130,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     viewMenu->addAction(toggleGameView);
     toggleGameView->setCheckable(true);
     connect(toggleGameView, &QAction::toggled, this, &MainWindow::setGameView);
+
+    QAction *a;
 
     // Main Stuff
 

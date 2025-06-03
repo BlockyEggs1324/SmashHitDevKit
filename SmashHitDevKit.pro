@@ -15,6 +15,7 @@ CONFIG += c++17
 SOURCES += \
     LevelLoader.cpp \
     MainWindow.cpp \
+    MyOpenGLWidget.cpp \
     PreferencesDialog.cpp \
     RoomLoader.cpp \
     SegmentLoader.cpp \
@@ -25,6 +26,7 @@ SOURCES += \
 HEADERS += \
     LevelLoader.h \
     MainWindow.h \
+    MyOpenGLWidget.h \
     PreferencesDialog.h \
     Rect3D.h \
     RoomLoader.h \

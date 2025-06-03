@@ -154,17 +154,19 @@ private:
         glm::vec3& out_origin,
         glm::vec3& out_direction);
 
+    QOpenGLTexture *tileTex;
+
     GLuint m_tileTexture;
-    GLuint loadTexture(QString filename);
+    QOpenGLTexture *loadTexture(QString filename);
     const unsigned char *tileData;
 
     // Fog shader stuff
-    GLuint m_roomShader = 0;
-    GLuint m_clearShader = 1;
-    GLuint m_basicShader = 2;
+    QOpenGLShaderProgram *m_roomProgram;
+    QOpenGLShaderProgram *m_clearProgram;
+    QOpenGLShaderProgram *m_basicProgram;
 
     GLuint loadShaderFromFile(const QString& path, GLenum type);
-    GLuint createShaderProgram(const QString& vertexPath, const QString& fragmentPath);
+    QOpenGLShaderProgram *createShaderProgram(const QString& path);
 
     QMatrix4x4 getMVP(const QMatrix4x4& model);
 
