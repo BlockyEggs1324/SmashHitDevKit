@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/res">
+        <file>shaders/2d.frag</file>
+        <file>shaders/2d.vert</file>
+        <file>shaders/basic.frag</file>
+        <file>shaders/basic.vert</file>
+        <file>shaders/clear.frag</file>
+        <file>shaders/clear.vert</file>
+        <file>shaders/room.frag</file>
+        <file>shaders/room.vert</file>
+        <file>shaders/shader.frag</file>
+        <file>shaders/shader.vert</file>
+    </qresource>
+</RCC>

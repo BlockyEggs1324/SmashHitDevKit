@@ -74,6 +74,7 @@ public:
     bool m_drawFaces;
     bool m_gameView;
     bool m_drawColour;
+    bool m_useShader;
 
     std::array<float, 4> lowerFogColour = {0.4f, 0.0f, 0.5f, 1.0f};
     std::array<float, 4> upperFogColour = {1.3f, 0.9f, 0.6f, 1.0f};
@@ -123,7 +124,6 @@ private:
     QWidget *m_parent;
     glm::mat4 projectionMatrix;
     glm::mat4 viewMatrix;
-    bool m_useShader;
 
     std::vector<Rect3D*> *m_selectedRects;
 

@@ -11,6 +11,10 @@
 #include <QBoxLayout>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QColorDialog>
+#include <QMediaPlayer>
+#include <QAudioOutput>
+
 #include "Views2D.h"
 #include "SegmentWidget.h"
 #include "SegmentLoader.h"
@@ -131,8 +135,35 @@ public:
 
         });
 
+        
 
-        // Buttons
+        QPushButton *primaryColourButton = new QPushButton("Select Primary Colour", this);
+        layout->addWidget(primaryColourButton);
+        connect(primaryColourButton, &QPushButton::pressed, this, [=]() {
+            QColor color = QColorDialog::getColor(Qt::white, this, "Select Primary Colour");
+            if (color.isValid()) {
+                upperFog = getFog(color);
+                qDebug() << "Selected upper fog colour:" << color;
+            }
+        });
+        QPushButton *secondaryColourButton = new QPushButton("Select Secondary Colour", this);
+        layout->addWidget(secondaryColourButton);
+        connect(secondaryColourButton, &QPushButton::pressed, this, [=]() {
+            QColor color = QColorDialog::getColor(Qt::white, this, "Select Secondary Colour");
+            if (color.isValid()) {
+                lowerFog = getFog(color);
+                qDebug() << "Selected lower fog colour:" << color;
+            }
+        });
+
+        QLineEdit *songEdit = new QLineEdit(this);
+        layout->addWidget(new QLabel("Song File Path"));
+        layout->addWidget(songEdit);
+        connect(songEdit, &QLineEdit::textEdited, this, [=](const QString& value) {
+            song = value;
+            qDebug() << "Song file path set to:" << song;
+        });
+
         QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
         // Connect the Apply button
@@ -148,7 +179,15 @@ public:
         connect(buttonBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked, this, &NewRoomWindow::reject);
         layout->addWidget(buttonBox);
 
-        //setLayout(layout);
+    }
+
+    std::array<float, 4> getFog(const QColor& color) {
+        std::array<float, 4> fogColor;
+        fogColor[0] = color.redF();
+        fogColor[1] = color.greenF();
+        fogColor[2] = color.blueF();
+        fogColor[3] = 1.0f; // Alpha channel set to 1.0 (opaque)
+        return fogColor;
     }
 
     void changeName(const QString& value) {
@@ -185,13 +224,124 @@ public:
 
     QStringList files;
     QString song;
-    QColor upperFog;
-    QColor lowerFog;
+    std::array<float, 4> upperFog;
+    std::array<float, 4> lowerFog;
 
 private:
     QString m_rootDir;
     QString m_roomName = "";
 
+};
+
+// Entire class for filtering sound directories
+class SoundDirFilterModel : public QSortFilterProxyModel {
+public:
+    SoundDirFilterModel(QObject *parent = nullptr) : QSortFilterProxyModel(parent) {}
+
+protected:
+    bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override {
+        if (!sourceModel()) return false;
+
+        QFileSystemModel *fsModel = qobject_cast<QFileSystemModel*>(sourceModel());
+        if (!fsModel) return false;
+
+        QModelIndex index = fsModel->index(sourceRow, 0, sourceParent);
+        QFileInfo info = fsModel->fileInfo(index);
+
+        // At the root: only show "snd" and "music" folders (case-insensitive)
+        if (!sourceParent.isValid()) {
+            QString name = info.fileName().toLower();
+            return info.isDir() && (name == "snd" || name == "music");
+        }
+
+        // Accept anything that is a descendant of "snd" or "music"
+        QModelIndex ancestor = sourceParent;
+        while (ancestor.isValid()) {
+            QString ancestorName = fsModel->fileInfo(ancestor).fileName().toLower();
+            if (ancestorName == "snd" || ancestorName == "music")
+                return true;
+            ancestor = ancestor.parent();
+        }
+
+        return false;
+    }
+};
+
+class SoundBrowser : public QDialog {
+    Q_OBJECT
+
+public:
+    SoundBrowser(QWidget *parent = nullptr, QString rootDir = "") : QDialog(parent), m_rootDir(rootDir) {
+    setWindowTitle("Sound Browser");
+
+    QVBoxLayout *layout = new QVBoxLayout(this);
+
+    QDir testDir(m_rootDir);
+    qDebug() << "m_rootDir contents:" << testDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    QFileSystemModel *fsModel = new QFileSystemModel(this);
+fsModel->setFilter(QDir::NoDotAndDotDot | QDir::AllDirs | QDir::Files);
+fsModel->setNameFilters(QStringList() << "*.ogg");
+fsModel->setNameFilterDisables(true);
+
+QTreeView *tree = new QTreeView(this);
+tree->setModel(fsModel);
+
+// Set root index to m_rootDir
+QModelIndex rootIndex = fsModel->setRootPath(m_rootDir); // Important: setRootPath returns usable index
+tree->setRootIndex(rootIndex);
+
+// Connect to directoryLoaded signal to hide unwanted folders
+connect(fsModel, &QFileSystemModel::directoryLoaded, this, [=](const QString &path) {
+    if (path != m_rootDir)
+        return;
+
+    for (int i = 0; i < fsModel->rowCount(rootIndex); ++i) {
+        QModelIndex idx = fsModel->index(i, 0, rootIndex);
+        QString name = fsModel->fileName(idx);
+        qDebug() << "Found folder in root:" << name;
+
+        if (name != "snd" && name != "music") {
+            tree->setRowHidden(i, rootIndex, true);
+        } else {
+            tree->setExpanded(idx, true);
+        }
+    }
+});
+
+    layout->addWidget(tree);
+
+    // Audio player setup
+    player = new QMediaPlayer(this);
+    audioOutput = new QAudioOutput(this);
+    player->setAudioOutput(audioOutput);
+
+    // Double-click to play sound
+    connect(tree, &QTreeView::doubleClicked, this, [=](const QModelIndex &index){
+        QFileInfo fileInfo = fsModel->fileInfo(index);
+        if (fileInfo.isFile() && fileInfo.suffix().toLower() == "ogg") {
+            player->setSource(QUrl::fromLocalFile(fileInfo.absoluteFilePath()));
+            audioOutput->setVolume(1.0);
+            player->play();
+        }
+    });
+
+    // Dialog buttons
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttonBox->button(QDialogButtonBox::Ok), &QPushButton::clicked, this, &SoundBrowser::accept);
+    connect(buttonBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked, this, &SoundBrowser::reject);
+    layout->addWidget(buttonBox);
+}
+
+    void resizeEvent(QResizeEvent *event) override {
+        QDialog::resizeEvent(event);
+    }
+
+    QString m_rootDir;
+    QMediaPlayer* player;
+    QAudioOutput* audioOutput;
+
+    ~SoundBrowser() override = default;
 };
 
 class MainWindow : public QMainWindow {
@@ -268,8 +418,12 @@ public:
             luaScript += "\tpStart = mgGetBool(\"start\", true)\n";
             luaScript += "\tpEnd = mgGetBool(\"end\", true)\n\n";
 
-            luaScript += "\tmgFogColor(1, 1, 1, .2, .2, .2)\n";
-            luaScript += "\tmgMusic(\"1\")\n";
+            luaScript += QString("\tmgFogColor(%1, %2, %3, %4, %5, %6)\n").arg(
+                QString::number(newRoom.lowerFog[0]), QString::number(newRoom.lowerFog[1]), QString::number(newRoom.lowerFog[2]),
+                QString::number(newRoom.upperFog[0]), QString::number(newRoom.upperFog[1]), QString::number(newRoom.upperFog[2])
+            );
+
+            luaScript += QString("\tmgMusic(\"%1\")\n").arg(newRoom.song);
             luaScript += "\tmgLowPass(0.2)\n";
             luaScript += "\tmgReverb(0.2, 0.5, 0.2)\n";
             luaScript += "\tmgEcho(0.2, 0.5, 0.75, 0.8)\n";
@@ -316,8 +470,23 @@ public:
                 newRoomFile.close();
             }
         }
+    }
 
-
+    void openSoundBrowser() {
+        if (soundBrowserDialog) {
+            soundBrowserDialog->raise();
+            soundBrowserDialog->activateWindow();
+            return;
+        }
+        soundBrowserDialog = new SoundBrowser(this, prefs.m_rootDir);
+        soundBrowserDialog->setModal(false);
+        soundBrowserDialog->setAttribute(Qt::WA_DeleteOnClose);
+        soundBrowserDialog->show();
+        soundBrowserDialog->raise();
+        soundBrowserDialog->activateWindow();
+        connect(soundBrowserDialog, &QDialog::destroyed, this, [=]() {
+            soundBrowserDialog = nullptr;
+        });
     }
 
     void loadSegmentFromFile() {
@@ -436,7 +605,7 @@ public:
     }
 
     void setColoured(bool checked) {
-        segmentWidget->m_drawColour = checked;
+        segmentWidget->m_useShader = checked;
     }
 
     void setGameView(bool checked) {
@@ -593,6 +762,8 @@ private:
     XYViewWidget *xyView;
     XZViewWidget *xzView;
     YZViewWidget *yzView;
+
+    SoundBrowser* soundBrowserDialog = nullptr;
 
     QTreeWidget* outliner;
 

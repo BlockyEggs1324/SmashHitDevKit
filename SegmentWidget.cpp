@@ -174,6 +174,10 @@ QMatrix4x4 SegmentWidget::getMVP(const QMatrix4x4& model) {
 }
 
 void SegmentWidget::paintGL() {
+
+    QPainter painter(this);
+    painter.beginNativePainting();
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glEnable(GL_DEPTH_TEST);
@@ -322,7 +326,11 @@ void SegmentWidget::paintGL() {
 
     // Now draw text
 
-    QPainter painter(this);
+    glUseProgram(0); // Unbind any shader program
+    glDisable(GL_TEXTURE_2D); // Disable texture mapping for text rendering
+    glDisable(GL_DEPTH_TEST); // Disable depth testing for 2D text rendering
+
+    painter.endNativePainting();
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 16));
     painter.drawText(10, 25, "3D View");
@@ -940,14 +948,16 @@ void SegmentWidget::mouseMoveEvent(QMouseEvent *event) {
     }
 }
 
-QOpenGLShaderProgram *SegmentWidget::createShaderProgram(const QString& path) {
-
+QOpenGLShaderProgram *SegmentWidget::createShaderProgram(const QString& name) {
     QOpenGLShaderProgram *program = new QOpenGLShaderProgram();
 
-    if (!program->addShaderFromSourceFile(QOpenGLShader::Vertex, path + ".vert"))
+    QString vertPath = QString(":/res/shaders/%1.vert").arg(name);
+    QString fragPath = QString(":/res/shaders/%1.frag").arg(name);
+
+    if (!program->addShaderFromSourceFile(QOpenGLShader::Vertex, vertPath))
         qWarning() << "Vertex shader failed:" << program->log();
 
-    if (!program->addShaderFromSourceFile(QOpenGLShader::Fragment, path + ".frag"))
+    if (!program->addShaderFromSourceFile(QOpenGLShader::Fragment, fragPath))
         qWarning() << "Fragment shader failed:" << program->log();
 
     if (!program->link())
@@ -975,53 +985,53 @@ void SegmentWidget::drawCubeNew(const Rect3D& rect, bool selected) {
     // Winding order is COUNTER-CLOCKWISE when viewed from outside
     GLfloat vertices[] = {
 
-    // Front face (p1, p2, p3, p1, p3, p4) - Z-
-    p1.x, p1.y, p1.z,  0.0f, 0.0f,
-    p2.x, p2.y, p2.z,  1.0f, 0.0f,
-    p3.x, p3.y, p3.z,  1.0f, 1.0f,
-    p1.x, p1.y, p1.z,  0.0f, 0.0f,
-    p3.x, p3.y, p3.z,  1.0f, 1.0f,
-    p4.x, p4.y, p4.z,  0.0f, 1.0f,
+        // Front face (p1, p2, p3, p1, p3, p4) - Z-
+        p1.x, p1.y, p1.z,  0.0f, 0.0f,
+        p2.x, p2.y, p2.z,  1.0f, 0.0f,
+        p3.x, p3.y, p3.z,  1.0f, 1.0f,
+        p1.x, p1.y, p1.z,  0.0f, 0.0f,
+        p3.x, p3.y, p3.z,  1.0f, 1.0f,
+        p4.x, p4.y, p4.z,  0.0f, 1.0f,
 
-    // Back face (p6, p5, p8, p6, p8, p7) - Z+
-    p6.x, p6.y, p6.z,  0.0f, 0.0f,
-    p5.x, p5.y, p5.z,  1.0f, 0.0f,
-    p8.x, p8.y, p8.z,  1.0f, 1.0f,
-    p6.x, p6.y, p6.z,  0.0f, 0.0f,
-    p8.x, p8.y, p8.z,  1.0f, 1.0f,
-    p7.x, p7.y, p7.z,  0.0f, 1.0f,
+        // Back face (p6, p5, p8, p6, p8, p7) - Z+
+        p6.x, p6.y, p6.z,  0.0f, 0.0f,
+        p5.x, p5.y, p5.z,  1.0f, 0.0f,
+        p8.x, p8.y, p8.z,  1.0f, 1.0f,
+        p6.x, p6.y, p6.z,  0.0f, 0.0f,
+        p8.x, p8.y, p8.z,  1.0f, 1.0f,
+        p7.x, p7.y, p7.z,  0.0f, 1.0f,
 
-    // Left face (p5, p1, p4, p5, p4, p8) - X-
-    p5.x, p5.y, p5.z,  0.0f, 0.0f,
-    p1.x, p1.y, p1.z,  1.0f, 0.0f,
-    p4.x, p4.y, p4.z,  1.0f, 1.0f,
-    p5.x, p5.y, p5.z,  0.0f, 0.0f,
-    p4.x, p4.y, p4.z,  1.0f, 1.0f,
-    p8.x, p8.y, p8.z,  0.0f, 1.0f,
+        // Left face (p5, p1, p4, p5, p4, p8) - X-
+        p5.x, p5.y, p5.z,  0.0f, 0.0f,
+        p1.x, p1.y, p1.z,  1.0f, 0.0f,
+        p4.x, p4.y, p4.z,  1.0f, 1.0f,
+        p5.x, p5.y, p5.z,  0.0f, 0.0f,
+        p4.x, p4.y, p4.z,  1.0f, 1.0f,
+        p8.x, p8.y, p8.z,  0.0f, 1.0f,
 
-    // Right face (p2, p6, p7, p2, p7, p3) - X+
-    p2.x, p2.y, p2.z,  0.0f, 0.0f,
-    p6.x, p6.y, p6.z,  1.0f, 0.0f,
-    p7.x, p7.y, p7.z,  1.0f, 1.0f,
-    p2.x, p2.y, p2.z,  0.0f, 0.0f,
-    p7.x, p7.y, p7.z,  1.0f, 1.0f,
-    p3.x, p3.y, p3.z,  0.0f, 1.0f,
+        // Right face (p2, p6, p7, p2, p7, p3) - X+
+        p2.x, p2.y, p2.z,  0.0f, 0.0f,
+        p6.x, p6.y, p6.z,  1.0f, 0.0f,
+        p7.x, p7.y, p7.z,  1.0f, 1.0f,
+        p2.x, p2.y, p2.z,  0.0f, 0.0f,
+        p7.x, p7.y, p7.z,  1.0f, 1.0f,
+        p3.x, p3.y, p3.z,  0.0f, 1.0f,
 
-    // Top face (p4, p3, p7, p4, p7, p8) - Y+
-    p4.x, p4.y, p4.z,  0.0f, 0.0f,
-    p3.x, p3.y, p3.z,  1.0f, 0.0f,
-    p7.x, p7.y, p7.z,  1.0f, 1.0f,
-    p4.x, p4.y, p4.z,  0.0f, 0.0f,
-    p7.x, p7.y, p7.z,  1.0f, 1.0f,
-    p8.x, p8.y, p8.z,  0.0f, 1.0f,
+        // Top face (p4, p3, p7, p4, p7, p8) - Y+
+        p4.x, p4.y, p4.z,  0.0f, 0.0f,
+        p3.x, p3.y, p3.z,  1.0f, 0.0f,
+        p7.x, p7.y, p7.z,  1.0f, 1.0f,
+        p4.x, p4.y, p4.z,  0.0f, 0.0f,
+        p7.x, p7.y, p7.z,  1.0f, 1.0f,
+        p8.x, p8.y, p8.z,  0.0f, 1.0f,
 
-    // Bottom face (p1, p5, p6, p1, p6, p2) - Y-
-    p1.x, p1.y, p1.z,  0.0f, 0.0f,
-    p5.x, p5.y, p5.z,  1.0f, 0.0f,
-    p6.x, p6.y, p6.z,  1.0f, 1.0f,
-    p1.x, p1.y, p1.z,  0.0f, 0.0f,
-    p6.x, p6.y, p6.z,  1.0f, 1.0f,
-    p2.x, p2.y, p2.z,  0.0f, 1.0f
+        // Bottom face (p1, p5, p6, p1, p6, p2) - Y-
+        p1.x, p1.y, p1.z,  0.0f, 0.0f,
+        p5.x, p5.y, p5.z,  1.0f, 0.0f,
+        p6.x, p6.y, p6.z,  1.0f, 1.0f,
+        p1.x, p1.y, p1.z,  0.0f, 0.0f,
+        p6.x, p6.y, p6.z,  1.0f, 1.0f,
+        p2.x, p2.y, p2.z,  0.0f, 1.0f
 
     };
 

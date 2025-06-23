@@ -51,9 +51,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     viewMenu->setStyleSheet(style);
     toolsMenu->setStyleSheet(style);
 
+    // File Menu
+
     QMenu *newMenu = new QMenu("&New", this);
     newMenu->setStyleSheet(style);
     fileMenu->addMenu(newMenu);
+
+    // New submenu
 
     QAction *newSegmentAction = new QAction("New &Segment", this);
     newMenu->addAction(newSegmentAction);
@@ -62,6 +66,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     newMenu->addAction(newRoomAction);
     connect(newRoomAction, &QAction::triggered, this, &MainWindow::newRoom);
 
+    // Open submenu
 
     QMenu *openMenu = new QMenu("&Open", this);
     openMenu->setStyleSheet(style);
@@ -89,6 +94,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     fileMenu->addAction(exitButton);
     connect(exitButton, &QAction::triggered, this, &MainWindow::close);
 
+    // Edit Menu
+
     QAction *undoButton = new QAction("&Undo", this);
     editMenu->addAction(undoButton);
     connect(undoButton, &QAction::triggered, this, &MainWindow::close);
@@ -111,6 +118,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     editMenu->addAction(prefsButton);
     connect(prefsButton, &QAction::triggered, this, &MainWindow::openPrefs);
 
+    // View Menu
+
     toggleWireframeButton = new QAction("Show &Outline", this);
     viewMenu->addAction(toggleWireframeButton);
     toggleWireframeButton->setCheckable(true);
@@ -131,7 +140,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_option(ViewOpti
     toggleGameView->setCheckable(true);
     connect(toggleGameView, &QAction::toggled, this, &MainWindow::setGameView);
 
-    QAction *a;
+    // Tools Menu
+
+    QAction *soundBrowser = new QAction("&Sound Browser", this);
+    toolsMenu->addAction(soundBrowser);
+    connect(soundBrowser, &QAction::triggered, this, &MainWindow::openSoundBrowser);
+    
+    QAction *textureBrowser = new QAction("&Template Browser", this);
 
     // Main Stuff
 
