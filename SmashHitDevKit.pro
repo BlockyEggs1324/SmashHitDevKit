@@ -1,4 +1,4 @@
-QT       += core gui 3dcore 3drender 3dinput 3dextras openglwidgets opengl xml
+QT       += core gui 3dcore 3drender 3dinput 3dextras openglwidgets opengl xml multimedia
 
 LIBS += -lopengl32 -lglu32 -lz
 
@@ -44,4 +44,5 @@ qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
-RESOURCES +=
+RESOURCES += \
+    SHDK.qrc
